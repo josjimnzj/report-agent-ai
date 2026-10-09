@@ -88,7 +88,18 @@ El agente marca sus ejecuciones con `mode = "query"`; si la base se comparte con
 
 ## Gráficas y reporte
 
-El reporte siempre muestra una gráfica (la tabla va en la pestaña «Tabla»). La respuesta final del agente incluye `chart`, `askChart` (no tenía claro el tipo de gráfica: propone una y pregunta) y `openReport` (el usuario pidió verlo en el reporte: el front abre Resultados). El usuario puede cambiar entre barras, líneas y pastel en el reporte o con los botones bajo la respuesta.
+El reporte siempre muestra una gráfica (la tabla va en la pestaña «Tabla»). La respuesta final del agente incluye `chart`, `askChart` (no tenía claro el tipo de gráfica: propone una y pregunta) y `openReport` (el usuario pidió verlo en el reporte: el front abre Resultados).
+
+`chart` (DevExtreme dxChart / dxPieChart):
+
+| Campo | Valores |
+|---|---|
+| `type` | `bar`, `horizontalbar`, `stackedbar`, `fullstackedbar`, `combo` (barras + línea), `line`, `spline`, `stepline`, `area`, `splinearea`, `stackedarea`, `scatter`, `pie`, `doughnut`, `none` |
+| `x`, `y` | Columna del eje / categorías y columnas numéricas |
+| `series` | Mezcla por columna: `{ column, type: bar\|line\|spline\|area\|scatter, axis: left\|right }` (p. ej. barras de ventas y monto como línea en el eje derecho) |
+| `refLines` | Líneas de referencia: `{ kind: average\|max\|min\|value, column, value, label }` (promedio, máximo y mínimo se calculan en el front con todas las filas; `value` para metas) |
+
+En Resultados el usuario cambia el tipo (lista agrupada), activa o quita la línea de promedio y abre la ayuda «¿Qué gráficas hay?» con todos los tipos, extras y ejemplos para pedírselos al asistente. Al **guardar un reporte** se elige la gráfica con vista previa; queda en el reporte (`chartType`, `chartAvg`) y se usa al reabrirlo.
 
 ## Desarrollo
 

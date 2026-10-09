@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SALES_COLUMNS } from '../src/mocks/salesByBranch.js';
-import { chartData, chartSpec, columnKinds, MAX_BAR, MAX_PIE, formatValue, genericMarkdown, isMoneyColumn, isSalesResult } from '../src/shared/resultView.js';
+import { CHART_TYPES, chartData, chartSpec, chartTypeLabel, columnKinds, MAX_BAR, MAX_PIE, formatValue, genericMarkdown, isMoneyColumn, isSalesResult } from '../src/shared/resultView.js';
 
 const cols = ['Mes', 'Ventas', 'Monto'];
 const rows = [['2026-01', 10, 1500.5], ['2026-02', 12, 1800], ['2026-03', 9, null]];
@@ -26,26 +26,58 @@ test('formato: moneda solo en columnas de importe, no en conteos', () => {
   assert.equal(formatValue(null, 'Monto'), '');
 });
 
+const base = (spec) => spec && { type: spec.type, x: spec.x, y: spec.y, ...(spec.transpose ? { transpose: true } : {}) };
+
 test('chartSpec usa la sugerencia si es coherente y si no la deduce', () => {
-  assert.deepEqual(chartSpec(cols, rows, { type: 'bar', x: 'Mes', y: ['Monto', 'Inventada'] }), { type: 'bar', x: 'Mes', y: ['Monto'] });
-  assert.deepEqual(chartSpec(cols, rows, null), { type: 'line', x: 'Mes', y: ['Ventas', 'Monto'] });
-  assert.deepEqual(chartSpec(['Sucursal', 'N'], [['A', 1], ['B', 2]], { type: 'none', x: '', y: [] }), { type: 'bar', x: 'Sucursal', y: ['N'] });
+  assert.deepEqual(base(chartSpec(cols, rows, { type: 'bar', x: 'Mes', y: ['Monto', 'Inventada'] })), { type: 'bar', x: 'Mes', y: ['Monto'] });
+  assert.deepEqual(base(chartSpec(cols, rows, null)), { type: 'line', x: 'Mes', y: ['Ventas', 'Monto'] });
+  assert.deepEqual(base(chartSpec(['Sucursal', 'N'], [['A', 1], ['B', 2]], { type: 'none', x: '', y: [] })), { type: 'bar', x: 'Sucursal', y: ['N'] });
   assert.equal(chartSpec(['Sucursal'], [['A'], ['B']], null), null); // sin medidas no hay gráfica
   assert.equal(chartSpec(cols, [], null), null);
-  assert.deepEqual(chartSpec(cols, rows.slice(0, 1), null), { type: 'line', x: 'Mes', y: ['Ventas', 'Monto'] });
-  assert.deepEqual(chartSpec(['S', 'N', 'M'], [['A', 1, 2]], { type: 'pie', x: 'S', y: ['N', 'M'] }), { type: 'pie', x: 'S', y: ['N'] });
+  assert.deepEqual(base(chartSpec(cols, rows.slice(0, 1), null)), { type: 'line', x: 'Mes', y: ['Ventas', 'Monto'] });
+  assert.deepEqual(base(chartSpec(['S', 'N', 'M'], [['A', 1, 2]], { type: 'pie', x: 'S', y: ['N', 'M'] })), { type: 'pie', x: 'S', y: ['N'] });
 });
 
 test('el reporte siempre grafica: solo medidas, una medida suelta y el tipo elegido por el usuario', () => {
   const totals = chartSpec(['Ventas', 'Monto'], [[12, 5000]], null);
-  assert.deepEqual(totals, { type: 'bar', x: 'Indicador', y: ['Valor'], transpose: true });
+  assert.deepEqual(base(totals), { type: 'bar', x: 'Indicador', y: ['Valor'], transpose: true });
   assert.deepEqual(chartData(totals, ['Ventas', 'Monto'], [[12, 5000]]).data, [{ Indicador: 'Ventas', Valor: 12 }, { Indicador: 'Monto', Valor: 5000 }]);
-  assert.deepEqual(chartSpec(['Anio', 'Ventas'], [[2025, 1], [2026, 2]], null), { type: 'line', x: 'Anio', y: ['Ventas'] });
+  assert.deepEqual(base(chartSpec(['Anio', 'Ventas'], [[2025, 1], [2026, 2]], null)), { type: 'line', x: 'Anio', y: ['Ventas'] });
   const single = chartSpec(['N'], [[1], [2]], null);
   assert.equal(single.x, '#');
   assert.deepEqual(chartData(single, ['N'], [[1], [2]]).data.map((d) => d['#']), [1, 2]);
   assert.equal(chartSpec(cols, rows, { type: 'bar', x: 'Mes', y: ['Monto'] }, 'pie').type, 'pie');
   assert.equal(chartSpec(cols, rows, null, 'otro').type, 'line');
+  assert.equal(chartSpec(cols, rows, null, { type: 'horizontalbar' }).rotated, true);
+});
+
+test('mezcla de series, segundo eje y líneas de referencia', () => {
+  const r = [['2026-01', 10, 1000], ['2026-02', 20, 3000]];
+  // Sugerencia del agente: barras de Ventas con Monto en línea al eje derecho, promedio y meta.
+  const hint = {
+    type: 'bar', x: 'Mes', y: ['Ventas'],
+    series: [{ column: 'Monto', type: 'line', axis: 'right' }],
+    refLines: [{ kind: 'average', column: 'Ventas', value: null, label: '' }, { kind: 'value', column: 'Ventas', value: 18, label: 'Meta' }, { kind: 'value', column: 'Ventas', value: null, label: 'x' }],
+  };
+  const spec = chartSpec(cols, r, hint);
+  assert.deepEqual(spec.y, ['Ventas', 'Monto']);
+  assert.deepEqual(spec.series, [{ column: 'Ventas', type: 'bar', axis: 'left' }, { column: 'Monto', type: 'line', axis: 'right' }]);
+  assert.deepEqual(spec.refLines.map((l) => [l.kind, l.value, l.label]), [['average', 15, 'Promedio de Ventas'], ['value', 18, 'Meta']]);
+  assert.ok(spec.hasAverage);
+  // El usuario quita el promedio; cambiar de tipo descarta las series mezcladas.
+  assert.equal(chartSpec(cols, r, hint, { avg: false }).refLines.length, 1);
+  assert.deepEqual(chartSpec(cols, r, hint, { type: 'line' }).series.map((x) => x.type), ['line', 'line']);
+  // Combinada deducida: Monto (otra magnitud) va al eje derecho; el promedio se agrega a pedido.
+  const combo = chartSpec(cols, r, null, { type: 'combo', avg: true });
+  assert.deepEqual(combo.series, [{ column: 'Ventas', type: 'bar', axis: 'left' }, { column: 'Monto', type: 'line', axis: 'right' }]);
+  assert.equal(combo.refLines[0].value, 15);
+  // Pastel no lleva líneas ni series.
+  assert.deepEqual(chartSpec(cols, r, hint, { type: 'pie', avg: true }).refLines, []);
+  // Máximo y mínimo se calculan con los datos.
+  const mm = chartSpec(cols, r, { type: 'bar', x: 'Mes', y: ['Monto'], refLines: [{ kind: 'max', column: 'Monto' }, { kind: 'min', column: 'Monto' }] });
+  assert.deepEqual(mm.refLines.map((l) => l.value), [3000, 1000]);
+  assert.equal(chartTypeLabel('combo'), 'Barras + línea');
+  assert.ok(CHART_TYPES.every((t) => t.label && t.help && t.ask));
 });
 
 test('chartData agrupa el pastel en «Otros» y recorta las barras', () => {

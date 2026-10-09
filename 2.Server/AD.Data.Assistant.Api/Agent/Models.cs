@@ -36,14 +36,20 @@ public sealed record QueryResponse(
 /// <param name="OpenReport">El usuario pidió ver el resultado en el reporte.</param>
 public sealed record AnswerParts(string Answer, int ResultQuery, ChartHint? Chart, bool AskChart, bool OpenReport);
 
-/// <summary>Gráfica sugerida por el agente para el resultado principal.</summary>
-public sealed record ChartHint(string Type, string X, IReadOnlyList<string> Y);
+/// <summary>Gráfica sugerida por el agente para el resultado principal (tipos de DevExtreme dxChart / dxPieChart).</summary>
+/// <param name="Series">Tipo y eje por columna, para mezclar (barras + línea, eje derecho para otra magnitud).</param>
+/// <param name="RefLines">Líneas de referencia horizontales: promedio, máximo, mínimo o un valor fijo (meta).</param>
+public sealed record ChartHint(string Type, string X, IReadOnlyList<string> Y, IReadOnlyList<ChartSeries>? Series = null, IReadOnlyList<ChartRefLine>? RefLines = null);
+
+public sealed record ChartSeries(string Column, string Type, string Axis);
+
+public sealed record ChartRefLine(string Kind, string Column, double? Value, string Label);
 
 /// <summary>Resultado de un execute_query exitoso, capturado en el servidor (el modelo solo ve una muestra).</summary>
 public sealed record QueryResult(string Sql, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<JsonElement>> Rows, long RowCount);
 
 /// <summary>Turno guardado de una conversación: lo que el agente recuerda para las preguntas de seguimiento.</summary>
-public sealed record ConversationTurn(string Question, string Answer, IReadOnlyList<string> Queries, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<JsonElement>> SampleRows, DateTimeOffset At);
+public sealed record ConversationTurn(string Question, string Answer, IReadOnlyList<string> Queries, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<JsonElement>> SampleRows, DateTimeOffset At, ChartHint? Chart = null);
 
 public sealed record ConversationDoc(string Id, string? Model, List<ConversationTurn> Turns, DateTimeOffset UpdatedAt);
 

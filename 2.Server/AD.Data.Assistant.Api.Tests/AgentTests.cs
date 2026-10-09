@@ -44,6 +44,13 @@ public class AgentTests
         Assert.False(askChart);
         Assert.True(openReport);
 
+        var combo = DataAgent.ParseAnswer("""{"answer":"x","resultQuery":1,"chart":{"type":"bar","x":"Mes","y":["Ventas","Monto"],"series":[{"column":"Monto","type":"line","axis":"right"}],"refLines":[{"kind":"average","column":"Ventas","value":null,"label":"Promedio"},{"kind":"value","column":"Ventas","value":500,"label":"Meta"}]},"askChart":false,"openReport":false}""");
+        Assert.Equal("line", combo.Chart!.Series![0].Type);
+        Assert.Equal("right", combo.Chart.Series[0].Axis);
+        Assert.Equal(2, combo.Chart.RefLines!.Count);
+        Assert.Null(combo.Chart.RefLines[0].Value);
+        Assert.Equal(500, combo.Chart.RefLines[1].Value);
+
         var ask = DataAgent.ParseAnswer("""{"answer":"¿Barras o pastel?","resultQuery":1,"chart":{"type":"bar","x":"A","y":["B"]},"askChart":true}""");
         Assert.True(ask.AskChart);
         Assert.False(ask.OpenReport);

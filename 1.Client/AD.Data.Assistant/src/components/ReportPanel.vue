@@ -95,23 +95,9 @@
             <p class="m-0 text-[14px] leading-relaxed text-ink">{{ result.answer }}</p>
           </article>
           <article v-if="chart" class="card min-w-0 p-4">
-            <div class="mb-2 flex flex-wrap items-center gap-2">
-              <h3 class="section-title m-0 flex-1">{{ chartTitle }}</h3>
-              <div class="no-print flex rounded-lg border border-line bg-white p-0.5" role="radiogroup" aria-label="Tipo de gráfica">
-                <button
-                  v-for="c in CHART_TYPES"
-                  :key="c.id"
-                  type="button"
-                  role="radio"
-                  :aria-checked="chart.type === c.id"
-                  class="flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-2.5 py-1 text-[12.5px]"
-                  :class="chart.type === c.id ? 'bg-brandblue font-semibold text-white' : 'bg-transparent text-ink-soft hover:text-brandblue'"
-                  :title="c.label"
-                  @click="session.setChartType(c.id)"
-                >
-                  <i class="fa-solid" :class="c.icon" aria-hidden="true" /><span :class="narrow ? 'sr-only' : ''">{{ c.label }}</span>
-                </button>
-              </div>
+            <div class="mb-3 flex flex-wrap items-start gap-2">
+              <h3 class="section-title m-0 flex-1 pt-1.5">{{ chartTitle }}</h3>
+              <ChartPicker class="no-print" :spec="chart" :compact="narrow" @change="(c) => session.setChartChoice(c)" />
             </div>
             <p v-if="result.askChart && !result.chartType" class="no-print m-0 mb-2 text-[12.5px] text-ink-soft">
               <i class="fa-solid fa-circle-question mr-1 text-brandlight" aria-hidden="true" /> El asistente propuso esta gráfica; elige otro tipo si lo prefieres.
@@ -183,12 +169,14 @@
       </div>
     </template>
 
-    <PromptDialog
+    <SaveReportDialog
       :visible="savingReport"
-      title="Guardar reporte"
-      label="Nombre del reporte"
-      :value="title"
-:hint="IS_API ? 'Se guarda en el servidor con el resultado actual.' : 'Se guarda en este navegador con el periodo y las sucursales actuales.'"
+      :title="title"
+      :result="result"
+      :charted="!sales"
+      :chart-hint="result?.chart ?? null"
+      :choice="result ? { type: result.chartType ?? undefined, avg: result.chartAvg ?? undefined } : {}"
+      :hint="IS_API ? 'Se guarda en el servidor con el resultado actual.' : 'Se guarda en este navegador con el periodo y las sucursales actuales.'"
       @confirm="saveReport"
       @cancel="savingReport = false"
     />
@@ -212,14 +200,15 @@ import DetailTable from './DetailTable.vue';
 import InsightsList from './InsightsList.vue';
 import ResultGrid from './ResultGrid.vue';
 import SqlPanel from './SqlPanel.vue';
-import PromptDialog from './PromptDialog.vue';
+import SaveReportDialog from './SaveReportDialog.vue';
+import ChartPicker from './ChartPicker.vue';
 import KebabMenu from './KebabMenu.vue';
 import GenericChart from './GenericChart.vue';
 import TracePanel from './TracePanel.vue';
 import LogPanel from './LogPanel.vue';
 import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
 import { IS_API } from '@/services/mode';
-import { CHART_TYPES, chartSpec, genericMarkdown, isSalesResult } from '@/shared/resultView';
+import { chartSpec, genericMarkdown, isSalesResult } from '@/shared/resultView';
 import { fmtInt } from '@/shared/salesReport';
 
 const TABS = [
@@ -280,7 +269,7 @@ const sales = computed(() => Boolean(result.value) && isSalesResult(result.value
 // Traza y Log son de una respuesta del chat (no de un reporte guardado abierto).
 const turn = computed(() => (result.value?.turnId ? session.chat.turns.find((t) => t.id === result.value.turnId) ?? null : null));
 const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value) && ((t.id !== 'trace' && t.id !== 'log') || turn.value)));
-const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart, result.value.chartType) : null));
+const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart, { type: result.value.chartType ?? undefined, avg: result.value.chartAvg ?? undefined }) : null));
 const chartTitle = computed(() => {
   const c = chart.value;
   if (!c) return '';
@@ -320,12 +309,16 @@ function commitTitle() {
   editingTitle.value = false;
 }
 
-function saveReport(name) {
+function saveReport({ name, chartType, chartAvg }) {
+  // La gráfica elegida al guardar queda fija en el reporte y también en la vista actual.
+  if (chartType !== undefined || chartAvg !== undefined) session.setChartChoice({ type: chartType, avg: chartAvg });
   // Con el backend real se guarda una copia del resultado para poder reabrirlo sin volver a consultar.
+  const snapshot = { ...result.value, chartType: chartType ?? result.value.chartType ?? null, chartAvg: chartAvg ?? result.value.chartAvg ?? null };
+  delete snapshot.turnId;
   reports.add({
     title: name, kind: 'analisis', source: 'sales', months: prefs.months,
     branches: result.value.branches, chatId: session.savedId,
-    result: IS_API || !sales.value ? { ...result.value } : null,
+    result: IS_API || !sales.value ? snapshot : null,
   });
   savingReport.value = false;
   $notify.success(`Reporte «${name}» guardado.`);

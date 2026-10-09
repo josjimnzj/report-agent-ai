@@ -25,6 +25,7 @@ export const useReportsStore = defineStore('reports', {
       const snapshot = result ? {
         answer: result.answer ?? '', columns: result.columns ?? [], rows: (result.rows ?? []).slice(0, MAX_SAVED_ROWS),
         totalRows: result.totalRows ?? result.rows?.length ?? 0, queries: result.queries ?? [], chart: result.chart ?? null,
+        chartType: result.chartType ?? null, chartAvg: result.chartAvg ?? null,
       } : null;
       const report = { id: newId(), title, kind, source: snapshot ? 'snapshot' : source, months, branches, chatId, published, result: snapshot, createdAt: Date.now() };
       this.reports.push(report);

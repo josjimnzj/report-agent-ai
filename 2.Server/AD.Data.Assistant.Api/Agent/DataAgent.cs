@@ -36,11 +36,38 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         "chart": {
           "type": "object",
           "properties": {
-            "type": { "type": "string", "enum": ["bar", "line", "pie", "none"] },
+            "type": { "type": "string", "enum": ["bar", "stackedbar", "fullstackedbar", "horizontalbar", "line", "spline", "stepline", "area", "stackedarea", "splinearea", "scatter", "combo", "pie", "doughnut", "none"] },
             "x": { "type": "string" },
-            "y": { "type": "array", "items": { "type": "string" } }
+            "y": { "type": "array", "items": { "type": "string" } },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "column": { "type": "string" },
+                  "type": { "type": "string", "enum": ["bar", "line", "spline", "area", "scatter"] },
+                  "axis": { "type": "string", "enum": ["left", "right"] }
+                },
+                "required": ["column", "type", "axis"],
+                "additionalProperties": false
+              }
+            },
+            "refLines": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": { "type": "string", "enum": ["average", "max", "min", "value"] },
+                  "column": { "type": "string" },
+                  "value": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+                  "label": { "type": "string" }
+                },
+                "required": ["kind", "column", "value", "label"],
+                "additionalProperties": false
+              }
+            }
           },
-          "required": ["type", "x", "y"],
+          "required": ["type", "x", "y", "series", "refLines"],
           "additionalProperties": false
         },
         "askChart": { "type": "boolean" },
@@ -127,7 +154,7 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         foreach (var t in conv.Turns.TakeLast(HistoryTurns))
         {
             messages.Add(new BetaMessageParam { Role = Role.User, Content = t.Question });
-            var summary = JsonSerializer.Serialize(new { answer = t.Answer, sql = t.Queries, columns = t.Columns, sampleRows = t.SampleRows }, Json);
+            var summary = JsonSerializer.Serialize(new { answer = t.Answer, sql = t.Queries, columns = t.Columns, sampleRows = t.SampleRows, chart = t.Chart }, Json);
             messages.Add(new BetaMessageParam { Role = Role.Assistant, Content = $"Respuesta anterior (resumen): {summary}" });
         }
         // La fecha va en el mensaje, no en el prompt de sistema, para no romper la caché del prefijo.
@@ -196,9 +223,21 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
             {
                 var x = ch.TryGetProperty("x", out var xe) ? xe.GetString() ?? "" : "";
                 var y = ch.TryGetProperty("y", out var ye) && ye.ValueKind == JsonValueKind.Array ? ye.EnumerateArray().Select(e => e.GetString() ?? "").ToList() : [];
-                chart = new ChartHint(type, x, y);
+                List<ChartSeries> series = ch.TryGetProperty("series", out var se) && se.ValueKind == JsonValueKind.Array
+                    ? se.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object)
+                        .Select(e => new ChartSeries(Str(e, "column"), Str(e, "type") is { Length: > 0 } st ? st : "bar", Str(e, "axis") == "right" ? "right" : "left"))
+                        .Where(s => s.Column.Length > 0).ToList()
+                    : [];
+                List<ChartRefLine> lines = ch.TryGetProperty("refLines", out var le) && le.ValueKind == JsonValueKind.Array
+                    ? le.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object)
+                        .Select(e => new ChartRefLine(Str(e, "kind") is { Length: > 0 } k ? k : "average", Str(e, "column"),
+                            e.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null, Str(e, "label")))
+                        .ToList()
+                    : [];
+                chart = new ChartHint(type, x, y, series, lines);
             }
             bool Flag(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+            static string Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
             return new(answer, index, chart, Flag("askChart"), Flag("openReport"));
         }
         catch (JsonException) { return new(t, 0, null, false, false); }
@@ -214,7 +253,7 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
 
     private async Task SaveTurnAsync(ConversationDoc conv, string model, string question, QueryResponse r, CancellationToken ct)
     {
-        var turn = new ConversationTurn(question, r.Answer, r.Queries, r.Columns, r.Rows.Take(HistorySampleRows).ToList(), time.GetUtcNow());
+        var turn = new ConversationTurn(question, r.Answer, r.Queries, r.Columns, r.Rows.Take(HistorySampleRows).ToList(), time.GetUtcNow(), r.Chart);
         var turns = conv.Turns.Append(turn).TakeLast(HistoryTurns * 2).ToList();
         var updated = conv with { Model = model, Turns = turns, UpdatedAt = time.GetUtcNow() };
         await store.PutAsync(Collections.Conversations, conv.Id, JsonSerializer.SerializeToElement(updated, Json), ct);

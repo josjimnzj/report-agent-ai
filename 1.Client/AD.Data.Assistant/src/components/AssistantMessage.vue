@@ -45,15 +45,18 @@
     <div v-if="turn.status === 'ok' && turn.askChart" class="-mt-1 flex flex-wrap items-center gap-1.5 pl-1" role="group" aria-label="Tipo de gráfica">
       <span class="text-[12px] text-ink-soft">¿Cómo quieres la gráfica?</span>
       <button
-        v-for="c in CHART_TYPES"
+        v-for="c in quickCharts"
         :key="c.id"
         type="button"
         class="quick-action"
-        :class="turn.view?.chartType === c.id ? 'border-brandlight font-semibold text-brandblue' : ''"
+        :class="{ active: turn.view?.chartType === c.id }"
         :aria-pressed="turn.view?.chartType === c.id"
         @click="$emit('chart', c.id)"
       >
         <i class="fa-solid" :class="c.icon" aria-hidden="true" /> {{ c.label }}
+      </button>
+      <button type="button" class="quick-action" title="Ver todos los tipos en Resultados" @click="$emit('select')">
+        <i class="fa-solid fa-ellipsis" aria-hidden="true" /> Más tipos
       </button>
     </div>
 
@@ -121,7 +124,7 @@
 import { computed, ref } from 'vue';
 import { effortLabel } from '@/shared/models';
 import { IS_API } from '@/services/mode';
-import { CHART_TYPES } from '@/shared/resultView';
+import { CHART_TYPES, QUICK_CHART_TYPES } from '@/shared/resultView';
 import LiveProgress from './LiveProgress.vue';
 
 const props = defineProps({
@@ -163,6 +166,8 @@ function sendBad() {
     if (ok) badOpen.value = false;
   } });
 }
+
+const quickCharts = QUICK_CHART_TYPES.map((id) => CHART_TYPES.find((t) => t.id === id));
 
 const RATINGS = [
   { value: 1, label: 'Respuesta útil', icon: 'fa-thumbs-up', active: 'text-good' },
