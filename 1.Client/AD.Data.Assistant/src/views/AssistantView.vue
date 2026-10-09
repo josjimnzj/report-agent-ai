@@ -83,6 +83,8 @@ import ReportPanel from '@/components/ReportPanel.vue';
 import ChatDetailsDialog from '@/components/ChatDetailsDialog.vue';
 import ReportActionDialog from '@/components/ReportActionDialog.vue';
 import { useActionsStore } from '@/stores/actions';
+import { useReportsStore } from '@/stores/reports';
+import { IS_API } from '@/services/mode';
 
 const VIEWS = [
   { id: 'chat', label: 'Chat', icon: 'fa-comments' },
@@ -93,6 +95,7 @@ const session = useSessionStore();
 const chats = useChatsStore();
 const prefs = usePrefsStore();
 const actions = useActionsStore();
+const reports = useReportsStore();
 const saving = ref(false);
 const editing = ref(false);
 
@@ -172,8 +175,16 @@ function editChat({ title, tags }) {
   editing.value = false;
 }
 
-onMounted(() => {
-  // Al entrar se abre el chat guardado más reciente con resultados (maqueta: «Análisis de ventas»).
+onMounted(async () => {
+  if (IS_API) {
+    // Chats, reportes y preferencias viven en Neon: se cargan al entrar.
+    try {
+      await Promise.all([chats.load(), reports.load(), prefs.load()]);
+    } catch (err) {
+      $notify.error(`No se pudieron cargar tus chats y reportes: ${err.message}`);
+    }
+  }
+  // Se abre el chat guardado más reciente con resultados.
   const first = chats.sorted.find((c) => c.turns.length);
   if (first) session.openChat(first.id);
 });

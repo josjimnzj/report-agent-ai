@@ -2,13 +2,29 @@
 
 Chat a pantalla completa para consultar en lenguaje natural la base de datos del CEM. Está hecho con Vue 3 y DevExtreme 22.2, siguiendo la estructura de `AD.Campaign.Manager`.
 
-**Fase actual: front con datos en duro.** No se llama a ninguna API. El servicio `src/services/dataAgentApi.mock.js` emite la misma secuencia de eventos que el SSE de `workflow-agent-api` (`status…` y después `done`) y devuelve un payload con la forma de `done` (`columns`, `rows`, `queries`, `conversationId`, `runId`…). La fase 3 solo sustituye ese módulo por el cliente real.
+El front tiene dos modos, elegidos con `VITE_DATA_MODE` al compilar:
+
+- **`api`: backend real** (`2.Server/AD.Data.Assistant.Api`).
+  - Las respuestas vienen del agente propio (Claude + MCP de SQL Server) por SSE.
+  - Chats, reportes y preferencias se guardan en Neon por `/api/docs`.
+  - El panel de resultados se adapta a cualquier resultado: respuesta, gráfica sugerida o deducida, tabla y SQL. El tablero de ventas (KPI, insights) aparece solo cuando el resultado tiene la forma de ventas por mes y sucursal.
+  - Campañas, segmentos y publicar en el menú se ven como «próximamente».
+- **`mock` (por defecto): maqueta con datos en duro.**
+  - `src/services/dataAgentApi.mock.js` imita el SSE.
+  - Todo se guarda en localStorage.
+
+| Variable | Uso |
+|---|---|
+| `VITE_DATA_MODE` | `api` o `mock` |
+| `VITE_DATA_API_URL` | URL del backend (también acepta solo el host o `/agent` con el proxy de Vite) |
+| `VITE_DATA_API_KEY` | Clave `Auth__ApiKey` del backend. Queda dentro del bundle, así que solo es aceptable detrás de la sesión del CEM |
 
 ## Uso
 
 ```bash
 npm install
-npm run dev        # http://localhost:5175
+npm run dev        # http://localhost:5175 (maqueta)
+VITE_DATA_MODE=api VITE_DATA_API_URL=http://localhost:5080 VITE_DATA_API_KEY=devkey npm run dev   # contra el backend local
 npm test           # node --test sobre las funciones puras
 npm run build      # dist/ → AD.Web/Views/DataAssistant/
 ```
@@ -25,7 +41,12 @@ docker build -t ad-data-assistant .
 docker run --rm -p 8080:8080 ad-data-assistant      # http://localhost:8080
 ```
 
-**Render.** Funciona sin configurar nada, porque Render busca `./Dockerfile` en la raíz. El blueprint `render.yaml`, también en la raíz, define un servicio web Docker en el plan gratuito con comprobación de salud en `/healthz`. No necesita variables de entorno.
+**Render.** El blueprint `render.yaml` de la raíz define dos servicios:
+
+- **`ad-data-assistant-api`:** el backend, con `2.Server/Dockerfile`.
+- **`ad-data-assistant`:** este front, con `./Dockerfile`.
+
+Las variables `VITE_*` del servicio del front llegan a la compilación como build args. Si no las defines, la imagen se construye en modo maqueta.
 
 Para publicarlo:
 
@@ -118,10 +139,8 @@ test/             salesReport.test.js, persist.test.js, tags.test.js, models.tes
 - **Selector de periodo.** Hay uno solo, global, en lugar de uno por gráfica, para no tener controles sin efecto.
 - **Colores.** Las sucursales usan la paleta categórica validada para daltonismo, con el color fijo por sucursal. Al filtrar, las sucursales que quedan no cambian de color.
 
-## Pendiente (fase 3)
+## Pendiente
 
-- Cliente SSE real (`fetch` + `ReadableStream`) contra `POST /api/agent/query/stream`, seleccionado con `VITE_DATA_MODE=api`. La clave se pone en `.env.<amb>.local`.
-- Traza y Log, razonamiento visible, máximo de iteraciones y valoración 👍/👎. Están en el plan pero no tienen sentido con datos en duro.
-- Interpretar resultados genéricos (`chartGuess`). Hoy el dashboard asume el resultado de ventas por mes y sucursal.
-- Usuario real de la sesión del CEM. Hoy son las iniciales en duro `JG`.
-- Segmentos, campañas y publicación reales: definir los endpoints del CEM (AD.Web) que crean listas de cuentas, programan campañas y registran opciones de menú. Hoy son simulados.
+- Campañas, segmentos y publicar en el menú con backend real. Hoy solo existen en modo maqueta.
+- Usuario real de la sesión del CEM. Hoy todo pertenece a `admin`.
+- Traza y Log del agente en el front, máximo de iteraciones configurable y valoración 👍/👎.

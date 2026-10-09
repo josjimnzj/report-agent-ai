@@ -9,6 +9,12 @@ RUN npm ci --no-audit --no-fund
 COPY 1.Client/AD.Data.Assistant/ ./
 # En el contenedor la app vive en la raíz del dominio (en AD.Web va bajo /v5.81/Views/DataAssistant/).
 ENV VITE_APP_BASE=/
+# Render pasa las variables de entorno del servicio como build args.
+# VITE_DATA_MODE=api conecta con el backend; sin valor, la maqueta con datos en duro.
+ARG VITE_DATA_MODE=mock
+ARG VITE_DATA_API_URL=
+ARG VITE_DATA_API_KEY=
+ENV VITE_DATA_MODE=$VITE_DATA_MODE VITE_DATA_API_URL=$VITE_DATA_API_URL VITE_DATA_API_KEY=$VITE_DATA_API_KEY
 RUN npm test && npm run build
 
 # 2) Servir estáticos con nginx sin root

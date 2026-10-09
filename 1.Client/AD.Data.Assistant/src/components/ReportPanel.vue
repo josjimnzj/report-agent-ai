@@ -1,6 +1,6 @@
 <template>
   <section class="card print-full flex h-full min-w-0 flex-col" :class="narrow ? 'scroll-thin overflow-y-auto' : 'overflow-hidden'" aria-label="Resultados">
-    <div v-if="!report" class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+    <div v-if="!result" class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
       <i class="fa-solid fa-chart-pie text-[40px] text-[#c9d6e2]" aria-hidden="true" />
       <p class="m-0 text-[15px] font-semibold text-ink">Aquí verás los resultados</p>
       <p class="m-0 max-w-sm text-[13px] muted">Haz una pregunta en el chat o abre un reporte guardado para ver indicadores, gráficas, la tabla y el SQL.</p>
@@ -34,7 +34,7 @@
             </button>
           </p>
         </div>
-        <div class="no-print" :class="narrow ? 'w-full' : 'w-[210px]'">
+        <div v-if="sales" class="no-print" :class="narrow ? 'w-full' : 'w-[210px]'">
           <DxSelectBox
             v-model:value="prefs.months"
             :items="PERIODS"
@@ -48,7 +48,7 @@
       <div class="no-print flex flex-wrap items-end gap-x-2 border-b border-line" :class="narrow ? 'px-2' : 'px-6'">
         <div class="flex flex-1 gap-1" :class="narrow ? 'scroll-thin overflow-x-auto' : 'min-w-max'" role="tablist" aria-label="Vistas del resultado">
           <button
-            v-for="t in TABS"
+            v-for="t in tabs"
             :id="`tab-${t.id}`"
             :key="t.id"
             type="button"
@@ -69,7 +69,7 @@
             primary
             :compact-text="narrow"
             label="Acciones sobre el reporte"
-            :items="REPORT_ACTIONS"
+            :items="reportActions"
             @select="(mode) => $emit('report-action', mode, actionContext())"
           />
           <button
@@ -89,6 +89,20 @@
 
       <div ref="body" class="print-full bg-[#f8fbfd]" :class="narrow ? 'flex-none p-3' : 'scroll-thin flex-1 overflow-y-auto p-5'">
         <div v-if="width === null" class="h-40" />
+        <div v-else-if="tab === 'results' && !sales" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
+          <article v-if="result.answer" class="card flex gap-3 p-4">
+            <i class="fa-solid fa-comment-dots mt-0.5 text-brandlight" aria-hidden="true" />
+            <p class="m-0 text-[14px] leading-relaxed text-ink">{{ result.answer }}</p>
+          </article>
+          <article v-if="chart" class="card min-w-0 p-4">
+            <h3 class="section-title mb-2">{{ chartTitle }}</h3>
+            <GenericChart :spec="chart" :columns="result.columns" :rows="result.rows" />
+          </article>
+          <article class="card min-w-0 p-4">
+            <h3 class="section-title mb-3">Detalle</h3>
+            <ResultGrid :columns="result.columns" :rows="result.rows" :total-rows="result.totalRows" :truncated="result.truncated" />
+          </article>
+        </div>
         <div v-else-if="tab === 'results'" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
           <div class="grid" :class="[wide ? 'grid-cols-4' : 'grid-cols-2', narrow ? 'gap-2' : 'gap-4']">
             <KpiCard v-for="k in report.kpis" :key="k.id" :kpi="k" :compact="narrow" />
@@ -140,7 +154,7 @@
       title="Guardar reporte"
       label="Nombre del reporte"
       :value="title"
-      hint="Se guarda en este navegador con el periodo y las sucursales actuales."
+:hint="IS_API ? 'Se guarda en el servidor con el resultado actual.' : 'Se guarda en este navegador con el periodo y las sucursales actuales.'"
       @confirm="saveReport"
       @cancel="savingReport = false"
     />
@@ -166,7 +180,11 @@ import ResultGrid from './ResultGrid.vue';
 import SqlPanel from './SqlPanel.vue';
 import PromptDialog from './PromptDialog.vue';
 import KebabMenu from './KebabMenu.vue';
+import GenericChart from './GenericChart.vue';
 import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
+import { IS_API } from '@/services/mode';
+import { chartSpec, genericMarkdown, isSalesResult } from '@/shared/resultView';
+import { fmtInt } from '@/shared/salesReport';
 
 const TABS = [
   { id: 'results', label: 'Resultados', icon: 'fa-chart-column' },
@@ -181,11 +199,12 @@ const ACTIONS = [
   { id: 'share', label: 'Compartir', icon: 'fa-solid fa-share-nodes' },
 ];
 const DEFAULT_TITLE = DEFAULT_REPORT_TITLE;
-const REPORT_ACTIONS = [
+// Con el backend real aún no existen: se muestran deshabilitadas como «próximamente».
+const reportActions = [
   { id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn' },
   { id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' },
   { id: 'publish', text: 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' },
-];
+].map((a) => (IS_API ? { ...a, text: `${a.text} (próximamente)`, disabled: true } : a));
 defineEmits(['report-action', 'edit-report']);
 
 const session = useSessionStore();
@@ -219,13 +238,24 @@ function actionContext() {
     columns: result.value.columns, rows: result.value.rows, reportId: session.reportOverride?.id ?? null, chatId: session.savedId,
   };
 }
-const report = computed(() => (result.value
+const sales = computed(() => Boolean(result.value) && isSalesResult(result.value.columns));
+const tabs = computed(() => (sales.value ? TABS : TABS.filter((t) => t.id !== 'insights')));
+const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart) : null));
+const chartTitle = computed(() => (chart.value ? `${chart.value.y.join(', ')} por ${chart.value.x}` : ''));
+const report = computed(() => (sales.value
   ? buildReport(result.value.columns, result.value.rows, { months: prefs.months, branches: result.value.branches })
   : null));
 const insights = computed(() => (report.value ? buildInsights(report.value) : []));
 
-const title = computed(() => session.reportTitle ?? result.value?.title ?? DEFAULT_TITLE);
+const shorten = (s, n = 90) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const title = computed(() => session.reportTitle ?? result.value?.title
+  ?? (sales.value ? DEFAULT_TITLE : shorten(result.value?.question) ?? 'Resultado'));
 const description = computed(() => {
+  if (!sales.value) {
+    const r = result.value;
+    const n = r.totalRows ?? r.rows.length;
+    return `${fmtInt(n)} ${n === 1 ? 'fila' : 'filas'} · ${r.queries.length} ${r.queries.length === 1 ? 'consulta SQL' : 'consultas SQL'}`;
+  }
   const r = report.value;
   const scope = r.branches.length < r.allBranches.length ? `de ${r.branches.join(', ')}` : 'por sucursal';
   return `Resumen de ventas, tendencias y desempeño ${scope} de los últimos ${r.range.months} meses (${r.range.from}–${r.range.to}).`;
@@ -245,15 +275,18 @@ function commitTitle() {
 }
 
 function saveReport(name) {
+  // Con el backend real se guarda una copia del resultado para poder reabrirlo sin volver a consultar.
   reports.add({
     title: name, kind: 'analisis', source: 'sales', months: prefs.months,
     branches: result.value.branches, chatId: session.savedId,
+    result: IS_API || !sales.value ? { ...result.value } : null,
   });
   savingReport.value = false;
   $notify.success(`Reporte «${name}» guardado.`);
 }
 
 function markdown() {
+  if (!sales.value) return genericMarkdown({ title: title.value, ...result.value });
   return buildMarkdown(report.value, { title: title.value, description: description.value, insights: insights.value, queries: result.value.queries });
 }
 const slug = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

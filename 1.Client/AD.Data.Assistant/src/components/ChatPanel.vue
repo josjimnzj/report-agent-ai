@@ -66,7 +66,7 @@
           <h2 class="section-title mb-3 flex items-center gap-2">
             <i class="fa-solid fa-lightbulb text-brandlight" aria-hidden="true" /> Sugerencias
           </h2>
-          <SuggestionList :items="SUGGESTIONS" @pick="send" />
+          <SuggestionList :items="IS_API ? FOLLOW_UP_SUGGESTIONS : SUGGESTIONS" @pick="send" />
         </div>
       </div>
     </div>
@@ -81,7 +81,8 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { usePrefsStore } from '@/stores/prefs';
-import { DEFAULT_REPORT_TITLE, EMPTY_STATE_SUGGESTIONS, SUGGESTIONS } from '@/mocks/salesByBranch';
+import { DEFAULT_REPORT_TITLE, EMPTY_STATE_SUGGESTIONS, FOLLOW_UP_SUGGESTIONS, SUGGESTIONS } from '@/mocks/salesByBranch';
+import { IS_API } from '@/services/mode';
 import { CURRENT_USER } from '@/mocks/seeds';
 import AssistantMessage from './AssistantMessage.vue';
 import Composer from './Composer.vue';

@@ -46,6 +46,7 @@ import { exportDataGrid } from 'devextreme/excel_exporter';
 import { Workbook } from 'exceljs';
 import { saveAs } from 'file-saver';
 import { monthLabel } from '@/shared/salesReport';
+import { isMoneyColumn, rowsAsObjects } from '@/shared/resultView';
 
 const props = defineProps({
   columns: { type: Array, required: true },
@@ -54,14 +55,12 @@ const props = defineProps({
   truncated: Boolean,
 });
 
-const COUNT_COLUMNS = new Set(['Oportunidades', 'Ganadas']);
-
-const dataSource = computed(() =>
-  props.rows.map((r, i) => Object.fromEntries([['__row', i], ...props.columns.map((c, j) => [c, r[j]])])));
+const dataSource = computed(() => rowsAsObjects(props.columns, props.rows));
+const isPeriod = (v) => typeof v === 'string' && /^\d{4}-\d{2}$/.test(v);
 
 const columnDefs = computed(() => props.columns.map((c) => {
   const numeric = props.rows.length && props.rows.every((r) => typeof r[props.columns.indexOf(c)] === 'number');
-  if (c === 'Mes') {
+  if (c === 'Mes' && props.rows.every((r) => r[props.columns.indexOf(c)] == null || isPeriod(r[props.columns.indexOf(c)]))) {
     return {
       dataField: c, caption: 'Mes', dataType: 'string',
       customizeText: ({ value }) => (value ? `${monthLabel(value)} ${String(value).slice(0, 4)}` : ''),
@@ -73,10 +72,12 @@ const columnDefs = computed(() => props.columns.map((c) => {
     caption: c,
     dataType: 'number',
     alignment: 'right',
-    format: COUNT_COLUMNS.has(c) ? { type: 'fixedPoint', precision: 0 } : { type: 'currency', currency: 'MXN', precision: 0 },
+    format: isMoneyColumn(c) ? { type: 'currency', currency: 'MXN', precision: 0 } : '#,##0.##',
   };
 }));
-const numericColumns = computed(() => columnDefs.value.filter((c) => c.dataType === 'number'));
+// Totales solo donde sumar tiene sentido (no en porcentajes, promedios, años o identificadores).
+const NOT_ADDITIVE = /(%|porcentaje|pct|tasa|promedio|media|ratio|a[ñn]o|anio|mes|^id|id$)/i;
+const numericColumns = computed(() => columnDefs.value.filter((c) => c.dataType === 'number' && !NOT_ADDITIVE.test(c.dataField)));
 
 function onExporting(e) {
   const workbook = new Workbook();

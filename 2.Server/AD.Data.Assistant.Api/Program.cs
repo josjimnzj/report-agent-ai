@@ -1,0 +1,152 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using AD.Data.Assistant.Api;
+using AD.Data.Assistant.Api.Agent;
+using AD.Data.Assistant.Api.Http;
+using AD.Data.Assistant.Api.Options;
+using AD.Data.Assistant.Api.Storage;
+using Anthropic;
+using Microsoft.Extensions.Options;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Render / Cloud Run inyectan el puerto en PORT.
+if (Environment.GetEnvironmentVariable("PORT") is { Length: > 0 } port)
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    o.KnownIPNetworks.Clear();
+    o.KnownProxies.Clear();
+});
+
+builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection("Anthropic"));
+builder.Services.PostConfigure<AnthropicOptions>(o => o.ApiKey ??= Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"));
+builder.Services.Configure<SqlMcpOptions>(builder.Configuration.GetSection("SqlMcp"));
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.PostConfigure<StorageOptions>(o => o.ConnectionString ??= Environment.GetEnvironmentVariable("DATABASE_URL"));
+builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
+
+var corsOrigins = (builder.Configuration.GetSection("Cors").Get<CorsOptions>() ?? new CorsOptions()).Origins;
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+{
+    if (corsOrigins.Length == 0) return;
+    if (corsOrigins.Contains("*")) p.AllowAnyOrigin(); else p.WithOrigins(corsOrigins);
+    p.WithHeaders("Content-Type", "X-Api-Key", "Authorization").WithMethods("GET", "POST", "PUT", "DELETE").SetPreflightMaxAge(TimeSpan.FromHours(1));
+}));
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IDocumentStore>(sp =>
+{
+    var opt = sp.GetRequiredService<IOptions<StorageOptions>>();
+    return string.IsNullOrWhiteSpace(opt.Value.ConnectionString)
+        ? new MemoryDocumentStore()
+        : new PgDocumentStore(opt, sp.GetRequiredService<ILogger<PgDocumentStore>>());
+});
+builder.Services.AddHostedService<StoreInitializer>();
+builder.Services.AddSingleton(sp =>
+{
+    var o = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
+    return string.IsNullOrWhiteSpace(o.BaseUrl)
+        ? new AnthropicClient { ApiKey = o.ApiKey }
+        : new AnthropicClient { ApiKey = o.ApiKey, BaseUrl = o.BaseUrl };
+});
+builder.Services.AddSingleton<SqlMcpClient>();
+builder.Services.AddSingleton<ModelCatalog>();
+builder.Services.AddSingleton<PromptStore>();
+builder.Services.AddSingleton<AgentLoop>();
+builder.Services.AddSingleton<DataAgent>();
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+
+var app = builder.Build();
+
+app.UseForwardedHeaders();
+app.UseCors(); // antes de la API key: el preflight OPTIONS no lleva credenciales
+app.UseMiddleware<ApiKeyAuthMiddleware>();
+app.Use(async (ctx, next) =>
+{
+    try { await next(); }
+    catch (ApiException ex) when (!ctx.Response.HasStarted)
+    {
+        ctx.Response.StatusCode = ex.StatusCode;
+        await ctx.Response.WriteAsJsonAsync(new { error = ex.Message });
+    }
+});
+
+var commit = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? Environment.GetEnvironmentVariable("GIT_COMMIT");
+var startedAt = DateTimeOffset.UtcNow;
+app.MapGet("/health", (IDocumentStore store, IOptions<AnthropicOptions> ai) => Results.Ok(new
+{
+    status = "ok",
+    commit = commit is { Length: >= 7 } ? commit[..7] : commit ?? "dev",
+    startedAt,
+    storage = store.Kind,
+    storageError = StoreInitializer.LastError,
+    anthropic = !string.IsNullOrWhiteSpace(ai.Value.ApiKey),
+}));
+
+app.MapGet("/api/models", (ModelCatalog c) => Results.Ok(new
+{
+    defaultModel = c.DefaultModel,
+    defaultEffort = c.DefaultEffort,
+    defaultMaxIterations = c.DefaultMaxIterations,
+    maxIterationsLimit = c.MaxIterationsLimit,
+    models = ModelCatalog.Models.Select(m => new { m.Id, m.Label, m.Note, m.Efforts, provider = "anthropic" }),
+}));
+
+app.MapGet("/api/mcp/tools", async (SqlMcpClient mcp, CancellationToken ct) =>
+    Results.Ok((await mcp.ListToolsAsync(ct)).Select(t => new { t.Name, t.Description })));
+
+// --- Agente (Server-Sent Events) ---
+app.MapPost("/api/agent/query/stream", async (QueryRequest req, DataAgent agent, IOptions<AnthropicOptions> ai, HttpContext ctx) =>
+{
+    string? problem = string.IsNullOrWhiteSpace(req.Question) || req.Question.Length > 4000
+        ? "La pregunta es obligatoria y no puede superar 4000 caracteres."
+        : string.IsNullOrWhiteSpace(ai.Value.ApiKey) ? "Falta configurar la clave de Anthropic (Anthropic__ApiKey)." : null;
+    if (problem is not null)
+    {
+        ctx.Response.StatusCode = problem.StartsWith("Falta") ? 503 : 400;
+        await ctx.Response.WriteAsJsonAsync(new { error = problem });
+        return;
+    }
+    await SseResponse.WriteAsync(ctx, (emit, ct) => agent.AskAsync(req, emit, ct));
+});
+
+// --- Documentos del front (chats, reportes, preferencias) en Neon ---
+var idPattern = new Regex("^[A-Za-z0-9_.:-]{1,120}$", RegexOptions.Compiled);
+IResult? CheckDoc(string collection, string? id) =>
+    !Collections.Public.Contains(collection) ? Results.NotFound(new { error = $"Colección desconocida: {collection}." })
+    : id is not null && !idPattern.IsMatch(id) ? Results.BadRequest(new { error = "Identificador inválido." })
+    : null;
+
+app.MapGet("/api/docs/{collection}", async (string collection, int? limit, IDocumentStore store, CancellationToken ct) =>
+    CheckDoc(collection, null) ?? Results.Ok(await store.ListAsync(collection, Math.Clamp(limit ?? 500, 1, 2000), ct)));
+
+app.MapGet("/api/docs/{collection}/{id}", async (string collection, string id, IDocumentStore store, CancellationToken ct) =>
+    CheckDoc(collection, id) ?? (await store.GetAsync(collection, id, ct) is { } doc ? Results.Ok(doc) : Results.NotFound()));
+
+app.MapPut("/api/docs/{collection}/{id}", async (string collection, string id, HttpRequest req, IDocumentStore store, IOptions<StorageOptions> opt, CancellationToken ct) =>
+{
+    if (CheckDoc(collection, id) is { } bad) return bad;
+    if (req.ContentLength > opt.Value.MaxDocumentBytes)
+        return Results.Json(new { error = $"El documento supera {opt.Value.MaxDocumentBytes / 1024 / 1024} MB." }, statusCode: 413);
+    JsonElement doc;
+    try { doc = (await JsonDocument.ParseAsync(req.Body, cancellationToken: ct)).RootElement.Clone(); }
+    catch (JsonException) { return Results.BadRequest(new { error = "El cuerpo debe ser JSON." }); }
+    if (doc.ValueKind != JsonValueKind.Object) return Results.BadRequest(new { error = "El documento debe ser un objeto JSON." });
+    if (doc.GetRawText().Length > opt.Value.MaxDocumentBytes)
+        return Results.Json(new { error = $"El documento supera {opt.Value.MaxDocumentBytes / 1024 / 1024} MB." }, statusCode: 413);
+    await store.PutAsync(collection, id, doc, ct);
+    return Results.Ok(new { saved = true });
+});
+
+app.MapDelete("/api/docs/{collection}/{id}", async (string collection, string id, IDocumentStore store, CancellationToken ct) =>
+    CheckDoc(collection, id) ?? (await store.DeleteAsync(collection, id, ct) ? Results.NoContent() : Results.NotFound()));
+
+app.Lifetime.ApplicationStopping.Register(() =>
+    app.Services.GetRequiredService<SqlMcpClient>().DisposeAsync().AsTask().GetAwaiter().GetResult());
+
+app.Run();
+
+public partial class Program;

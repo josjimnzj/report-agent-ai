@@ -1,5 +1,37 @@
-# Blueprint de Render (plan gratuito). Maqueta de AD.Data.Assistant con datos en duro: no necesita variables.
+# Blueprint de Render (plan gratuito): API con el agente y front. Los valores con sync:false se capturan en el panel.
 services:
+  # API .NET 10 + agente Claude + MCP de SQL Server (proceso hijo). Guarda chats, reportes y ejecuciones en Neon.
+  - type: web
+    name: ad-data-assistant-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./2.Server/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_URL            # cadena de conexión de Neon (postgresql://…?sslmode=require)
+        sync: false
+      - key: Auth__ApiKey            # clave que el front envía en X-Api-Key
+        generateValue: true
+      - key: Cors__AllowedOrigins    # "*" o la URL del front
+        value: "*"
+      - key: SqlMcp__Host
+        sync: false
+      - key: SqlMcp__Database
+        sync: false
+      - key: SqlMcp__User
+        sync: false
+      - key: SqlMcp__Password
+        sync: false
+      - key: SqlMcp__Encrypt
+        value: "false"
+      - key: SqlMcp__TrustCert
+        value: "true"
+
+  # Front (Vite + nginx). Las variables VITE_* se usan al compilar la imagen.
   - type: web
     name: ad-data-assistant
     runtime: docker
@@ -8,3 +40,13 @@ services:
     dockerContext: .
     healthCheckPath: /healthz
     autoDeploy: true
+    envVars:
+      - key: VITE_DATA_MODE          # "api" = backend real; "mock" = maqueta con datos en duro
+        value: api
+      - key: VITE_DATA_API_URL       # p. ej. https://ad-data-assistant-api.onrender.com
+        sync: false
+      - key: VITE_DATA_API_KEY
+        fromService:
+          type: web
+          name: ad-data-assistant-api
+          envVarKey: Auth__ApiKey

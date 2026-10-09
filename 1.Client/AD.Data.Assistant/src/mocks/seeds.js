@@ -60,5 +60,5 @@ export const SEED_REPORTS = [
   report('seed-r7', 'Cobranza por zona', 'pdf'),
 ];
 
-// Usuario de la sesión del CEM (en duro hasta integrar con AD.Web).
-export const CURRENT_USER = { initials: 'JG', name: 'Usuario CEM' };
+// Usuario de la sesión: por ahora todo pertenece al usuario admin (también en el backend).
+export const CURRENT_USER = { initials: 'AD', name: 'admin' };

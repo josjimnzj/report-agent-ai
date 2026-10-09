@@ -122,6 +122,14 @@ export const SUGGESTIONS = [
   'Analiza la rentabilidad por sucursal',
 ];
 
+// Seguimientos genéricos para respuestas del agente real.
+export const FOLLOW_UP_SUGGESTIONS = [
+  'Muéstralo por mes',
+  'Compáralo con el mismo periodo del año pasado',
+  'Dame solo el top 10',
+  '¿Cómo lo calculaste?',
+];
+
 export const EMPTY_STATE_SUGGESTIONS = [
   SALES_QUESTION,
   'Ventas ganadas por mes en 2026',

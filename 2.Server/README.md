@@ -1,0 +1,82 @@
+# AD.Data.Assistant.Api
+
+Backend del asistente de datos: **agente propio** (Claude, Anthropic SDK para .NET) que responde preguntas de negocio sobre la base del CEM usando el **MCP de SQL Server de AddACCION** ([addaccion-mcp-sql](https://github.com/josjimnzj/addaccion-mcp-sql)) como proceso hijo por stdio, y que guarda todo en **Neon** como documentos JSON.
+
+## Cómo funciona
+
+1. `POST /api/agent/query/stream` recibe `{ question, conversationId?, model?, effort?, maxIterations? }` y responde por **Server-Sent Events**.
+2. **Fases.** El agente arranca el MCP (`node /opt/addaccion-mcp-sql/dist/index.js`) y le da a Claude sus herramientas:
+   - Grafo del esquema: `schema_overview`, `schema_search`, `schema_describe`, `schema_path`, `schema_examples` y `schema_checks`.
+   - Exploración: `list_tables`, `describe_table`…
+   - `execute_query`, solo lectura.
+
+   El progreso llega como eventos `status` con `phase`/`label`: Interpretando, Revisando el modelo de datos, Generando consulta SQL, Ejecutando en SQL Server y Analizando resultados.
+3. **Filas reales.** El servidor guarda el resultado completo de cada `execute_query`. El modelo solo ve una muestra (100 filas) y al final indica qué consulta es el resultado principal (`resultQuery`) y qué gráfica conviene (`chart`). Así las filas que recibe el usuario salen de SQL Server tal cual y no se gastan tokens en reescribirlas.
+4. **Seguimiento.** Cada conversación guarda un historial compacto en Neon (pregunta, respuesta, SQL y 15 filas de muestra por turno, hasta 16 turnos). Las preguntas de seguimiento («ahora solo septiembre») reutilizan el SQL anterior.
+5. **Registro.** Cada ejecución queda registrada (modelo, esfuerzo, iteraciones, tokens, SQL, error) en la colección `runs`.
+
+**Modelos** (`GET /api/models`):
+
+| Modelo | Uso | Fallback si declina por política |
+|---|---|---|
+| Claude Opus 5.5 | por defecto | Claude Opus 4.8 |
+| Claude Sonnet 5.5 | — | — |
+| Claude Haiku 5.5 | — | — |
+| Claude Fable 5.1 | — | Claude Opus 4.8 |
+
+- Todos admiten esfuerzo de `low` a `max`; el valor por defecto es `high`.
+- El razonamiento es adaptativo.
+- El prompt de sistema se cachea; la fecha de hoy va en el mensaje para no romper la caché.
+- El fallback usa el parámetro beta `fallbacks` del servidor (`server-side-fallback-2026-06-01`). Se desactiva con `Anthropic__ServerFallbacks=false`.
+
+## Almacenamiento (Neon)
+
+Una tabla JSONB, `ada_documents (owner, collection, id, data, created_at, updated_at)`, que se crea sola al arrancar. Por ahora el dueño de todo es `admin` (`Storage__Owner`).
+
+| Colección | Qué guarda | Endpoint |
+|---|---|---|
+| `chats` | conversaciones guardadas del front (con etiquetas y resultados, máximo 500 filas por turno) | `/api/docs/chats` |
+| `reports` | reportes guardados con una copia del resultado | `/api/docs/reports` |
+| `prefs` | preferencias (modelo, esfuerzo, menú…) | `/api/docs/prefs` |
+| `conversations` | historial del agente para las preguntas de seguimiento | — |
+| `runs` | registro de ejecuciones | — |
+
+`GET /api/docs/{colección}`, `GET|PUT|DELETE /api/docs/{colección}/{id}`. Si no se configura `DATABASE_URL`, se usa memoria; solo sirve para desarrollo y se pierde al reiniciar.
+
+Campañas, segmentos y publicar en el menú **aún no tienen backend**. En el front aparecen como «próximamente».
+
+## Configuración
+
+| Variable | Descripción |
+|---|---|
+| `ANTHROPIC_API_KEY` | Clave de Anthropic |
+| `DATABASE_URL` | Neon: `postgresql://usuario:clave@host/db?sslmode=require` |
+| `Auth__ApiKey` | Clave que exige `/api/*` (`X-Api-Key` o `Authorization: Bearer`). Sin ella, `/api` responde 503 |
+| `Cors__AllowedOrigins` | Orígenes del front, separados por coma, o `*` |
+| `SqlMcp__Host`, `__Port`, `__Database`, `__User`, `__Password`, `__Encrypt`, `__TrustCert` | SQL Server del CEM (solo lectura) |
+| `SqlMcp__Script` | Ruta del MCP compilado (en la imagen: `/opt/addaccion-mcp-sql/dist/index.js`) |
+| `Anthropic__Model` / `__Effort` / `__DefaultMaxIterations` | Valores por defecto |
+
+`GET /health` informa el almacenamiento (`neon` o `memory`), si Neon dio error al arrancar y si hay clave de Anthropic.
+
+## Desarrollo
+
+```bash
+# MCP compilado en local
+git clone https://github.com/josjimnzj/addaccion-mcp-sql ../addaccion-mcp-sql && (cd ../addaccion-mcp-sql && npm ci && npm run build)
+
+cd 2.Server/AD.Data.Assistant.Api
+ANTHROPIC_API_KEY=… Auth__ApiKey=devkey Cors__AllowedOrigins=* \
+SqlMcp__Script=../../../addaccion-mcp-sql/dist/index.js SqlMcp__Host=… SqlMcp__User=… SqlMcp__Password=… SqlMcp__Database=… \
+dotnet run            # sin DATABASE_URL usa memoria
+
+cd 2.Server && dotnet test
+# Las pruebas del almacén contra un Postgres real se activan con
+# ADA_TEST_PG="Host=localhost;Port=5432;Username=postgres;Database=ada_test"
+```
+
+El front se conecta en modo API con `VITE_DATA_MODE=api VITE_DATA_API_URL=http://localhost:5080 VITE_DATA_API_KEY=devkey npm run dev`.
+
+## Docker
+
+`2.Server/Dockerfile` (contexto: raíz del repositorio) compila addaccion-mcp-sql desde GitHub en un commit fijo (`MCP_COMMIT`), publica la API y deja ambos en la imagen `aspnet:10.0`, que se ejecuta sin root. Para actualizar el MCP, cambia `MCP_COMMIT`.

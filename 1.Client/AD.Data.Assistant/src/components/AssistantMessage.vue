@@ -42,13 +42,13 @@
       </span>
     </button>
 
-    <div v-if="turn.status === 'ok'" class="-mt-1 flex flex-wrap gap-1.5 pl-1" role="group" aria-label="Acciones con este resultado">
+    <div v-if="turn.status === 'ok' && !IS_API" class="-mt-1 flex flex-wrap gap-1.5 pl-1" role="group" aria-label="Acciones con este resultado">
       <button v-for="a in QUICK_ACTIONS" :key="a.id" type="button" class="quick-action" @click="$emit('action', a.id)">
         <i :class="a.icon" aria-hidden="true" /> {{ a.text }}
       </button>
     </div>
 
-    <div v-else-if="turn.status !== 'running'" class="flex gap-3 rounded-xl border border-line bg-white px-4 py-3" role="status">
+    <div v-if="turn.status !== 'running' && turn.status !== 'ok'" class="flex gap-3 rounded-xl border border-line bg-white px-4 py-3" role="status">
       <i class="fa-solid mt-0.5" :class="turn.status === 'stopped' ? 'fa-circle-pause text-ink-soft' : 'fa-triangle-exclamation text-bad'" aria-hidden="true" />
       <span class="text-[13px] text-ink-soft">{{ turn.answer }}</span>
     </div>
@@ -57,6 +57,7 @@
 
 <script setup>
 import { effortLabel } from '@/shared/models';
+import { IS_API } from '@/services/mode';
 import LiveProgress from './LiveProgress.vue';
 
 defineProps({

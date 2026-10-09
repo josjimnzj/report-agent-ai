@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="AD.Data.Assistant.Api.Tests/AD.Data.Assistant.Api.Tests.csproj" />
+  <Project Path="AD.Data.Assistant.Api/AD.Data.Assistant.Api.csproj" />
+</Solution>

@@ -3,3 +3,5 @@
 **/.docs
 **/*.local
 .git
+**/bin
+**/obj

@@ -10,6 +10,16 @@ import { SALES_COLUMNS, SALES_QUERIES, SALES_ROWS } from '@/mocks/salesByBranch'
 
 const blankChat = () => ({ id: newId(), title: '', tags: [], conversationId: null, provider: null, turns: [], createdAt: Date.now() });
 
+/**
+ * Un chat abierto desde un reporte guardado aún no tiene conversación en el servidor: la primera pregunta
+ * lleva el SQL del reporte como contexto para que el agente parta de él.
+ */
+function withReportContext(chat, question) {
+  const base = chat.turns.find((t) => t.kind === 'report');
+  if (chat.conversationId || !base?.queries?.length) return question;
+  return `Partimos del reporte guardado «${chat.title}», que se obtuvo con este SQL:\n${base.queries.join('\n\n')}\n\nPetición: ${question}`;
+}
+
 // Estado del chat activo. No se persiste: un chat solo se guarda con «Guardar».
 export const useSessionStore = defineStore('session', {
   state: () => ({
@@ -23,7 +33,7 @@ export const useSessionStore = defineStore('session', {
     controller: null,
   }),
   getters: {
-    turnsWithData: (s) => s.chat.turns.filter((t) => t.status === 'ok' && t.columns?.length),
+    turnsWithData: (s) => s.chat.turns.filter((t) => (t.status === 'ok' || t.status === 'max_iterations') && t.columns?.length),
     selectedTurn() {
       return this.turnsWithData.find((t) => t.id === this.selectedTurnId) ?? this.turnsWithData.at(-1) ?? null;
     },
@@ -33,7 +43,8 @@ export const useSessionStore = defineStore('session', {
       if (this.reportOverride) return this.reportOverride;
       const t = this.selectedTurn;
       return t ? {
-        id: t.id, title: null, branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
+        id: t.id, title: null, question: t.question, answer: t.answer, chart: t.view?.chart ?? null,
+        branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
         queries: t.queries, totalRows: t.totalRows ?? t.rows.length, truncated: Boolean(t.truncated),
       } : null;
     },
@@ -79,6 +90,14 @@ export const useSessionStore = defineStore('session', {
     },
     /** Datos de un reporte guardado para mostrarlo o actuar sobre él (null si es de ejemplo sin datos). */
     savedReportData(report) {
+      if (report.result) {
+        // Reporte guardado con su resultado (modo API).
+        return {
+          id: report.id, title: report.title, months: report.months ?? 6, branches: report.branches ?? null,
+          columns: report.result.columns, rows: report.result.rows, queries: report.result.queries,
+          answer: report.result.answer, chart: report.result.chart, totalRows: report.result.totalRows, reportId: report.id,
+        };
+      }
       if (report.source !== 'sales') {
         $notify.info(`«${report.title}» es un reporte de ejemplo sin datos en esta maqueta.`);
         return null;
@@ -94,12 +113,15 @@ export const useSessionStore = defineStore('session', {
       if (!data) return false;
       this.newChat();
       const scope = data.branches?.length ? data.branches.join(', ') : 'todas las sucursales';
+      const answer = report.result
+        ? `Cargué el reporte guardado «${report.title}». Pídeme los cambios (otro periodo, otro filtro, una comparación…) y guárdalo de nuevo desde Resultados.`
+        : `Cargué el reporte guardado «${report.title}» (últimos ${data.months} meses · ${scope}). Pídeme los cambios: otro periodo, otras sucursales, una comparación… y guárdalo de nuevo desde Resultados.`;
       this.chat.title = report.title;
       this.chat.turns.push({
         id: newId(), kind: 'report', reportId: report.id, question: `Editar el reporte «${report.title}»`,
         askedAt: Date.now(), answeredAt: Date.now(), status: 'ok', phases: [],
-        answer: `Cargué el reporte guardado «${report.title}» (últimos ${data.months} meses · ${scope}). Pídeme los cambios: otro periodo, otras sucursales, una comparación… y guárdalo de nuevo desde Resultados.`,
-        columns: data.columns, rows: data.rows, queries: data.queries, view: { branches: data.branches },
+        answer, columns: data.columns, rows: data.rows, queries: data.queries, totalRows: data.totalRows,
+        view: { branches: data.branches, chart: data.chart ?? null }, reportAnswer: data.answer ?? null,
         elapsedMs: 0, runId: null,
       });
       this.reportTitle = report.title;
@@ -107,11 +129,9 @@ export const useSessionStore = defineStore('session', {
       return true;
     },
     openReport(report) {
-      if (!this.savedReportData(report)) return false;
-      this.reportOverride = {
-        id: report.id, title: report.title, months: report.months, branches: report.branches,
-        columns: SALES_COLUMNS, rows: SALES_ROWS, queries: SALES_QUERIES,
-      };
+      const data = this.savedReportData(report);
+      if (!data) return false;
+      this.reportOverride = data;
       return true;
     },
     stop() {
@@ -143,7 +163,7 @@ export const useSessionStore = defineStore('session', {
       const closePhase = (at) => { if (last) last.ms = Math.round(at - last.startedAt); };
       try {
         const done = await streamQuery(
-          { question: q, conversationId: this.chat.conversationId, model: run.model, effort: run.effort },
+          { question: withReportContext(this.chat, q), conversationId: this.chat.conversationId, model: run.model, effort: run.effort },
           {
             signal: this.controller.signal,
             onEvent: (e) => {
@@ -159,8 +179,9 @@ export const useSessionStore = defineStore('session', {
           },
         );
         Object.assign(live, {
-          status: done.status, answer: done.answer, columns: done.columns, rows: done.rows,
+          status: done.status, answer: done.answer, columns: done.columns, rows: done.rows, totalRows: done.totalRows ?? done.rows?.length,
           queries: done.queries, view: done.view, elapsedMs: done.elapsedMs, runId: done.runId, answeredAt: Date.now(),
+          servedBy: done.servedBy ?? null,
         });
         this.chat.conversationId = done.conversationId;
         this.selectedTurnId = live.id;

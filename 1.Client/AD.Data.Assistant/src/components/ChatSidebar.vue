@@ -83,7 +83,7 @@
               @select="(a) => onChatAction(a, c)"
             />
           </li>
-          <li v-if="!visibleChats.length" class="px-2 py-2 text-[13px] muted">Sin coincidencias.</li>
+          <li v-if="!visibleChats.length" class="px-2 py-2 text-[13px] muted">{{ search || activeTag ? 'Sin coincidencias.' : 'Aún no hay conversaciones guardadas.' }}</li>
         </ul>
         <button
           v-if="filteredChats.length > LIMIT && !search && !activeTag"
@@ -120,7 +120,7 @@
               @select="(a) => onReportAction(a, r)"
             />
           </li>
-          <li v-if="!visibleReports.length" class="px-2 py-2 text-[13px] muted">Sin coincidencias.</li>
+          <li v-if="!visibleReports.length" class="px-2 py-2 text-[13px] muted">{{ search ? 'Sin coincidencias.' : 'Aún no hay reportes guardados.' }}</li>
         </ul>
         <button
           v-if="filteredReports.length > LIMIT && !search"
@@ -132,7 +132,7 @@
           {{ showAllReports ? 'Ver menos' : 'Ver todos' }}
         </button>
 
-        <template v-if="actions.recent.length">
+        <template v-if="actions.recent.length && !IS_API">
           <h2 class="section-title px-2 pb-1 pt-6">Segmentos y campañas</h2>
           <ul class="m-0 list-none p-0">
             <li v-for="x in actions.recent" :key="x.id" class="relative">
@@ -187,6 +187,7 @@ import { useReportsStore } from '@/stores/reports';
 import { usePrefsStore } from '@/stores/prefs';
 import { useSessionStore } from '@/stores/session';
 import { tagKey } from '@/shared/tags';
+import { IS_API } from '@/services/mode';
 import { useActionsStore } from '@/stores/actions';
 import { $notify } from '@/shared/notify';
 import { fmtInt } from '@/shared/salesReport';
@@ -228,13 +229,15 @@ const chatMenu = (c) => [
   { id: 'edit', text: 'Editar título y etiquetas', icon: 'fa-solid fa-pen' },
   { id: 'delete', text: 'Eliminar', icon: 'fa-solid fa-trash', danger: true },
 ];
+// Campañas, segmentos y publicación aún no existen en el backend real: se ven como «próximamente».
+const soon = (item) => (IS_API ? { ...item, text: `${item.text} (próximamente)`, disabled: true } : item);
 const reportMenu = (r) => [
   { id: 'open', text: 'Abrir', icon: 'fa-solid fa-chart-column' },
   { id: 'edit-chat', text: 'Editar en conversación nueva', icon: 'fa-solid fa-comments' },
-  { id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn', beginGroup: true },
-  { id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' },
-  { id: 'publish', text: r.published ? 'Cambiar publicación' : 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' },
-  { id: 'unpublish', text: 'Quitar del menú', icon: 'fa-solid fa-eye-slash', visible: Boolean(r.published) },
+  soon({ id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn', beginGroup: true }),
+  soon({ id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' }),
+  soon({ id: 'publish', text: r.published ? 'Cambiar publicación' : 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' }),
+  { id: 'unpublish', text: 'Quitar del menú', icon: 'fa-solid fa-eye-slash', visible: Boolean(r.published) && !IS_API },
   { id: 'rename', text: 'Renombrar', icon: 'fa-solid fa-pen', beginGroup: true },
   { id: 'delete', text: 'Eliminar', icon: 'fa-solid fa-trash', danger: true },
 ];
