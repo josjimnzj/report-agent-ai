@@ -31,30 +31,18 @@ npm run build      # dist/ → AD.Web/Views/DataAssistant/
 
 ## Docker y Render
 
-La imagen compila con Node 22, ejecuta las pruebas y sirve `dist/` con nginx sin root. nginx escucha en `$PORT` (Render lo inyecta; en local es 8080), redirige a `index.html` las rutas de la SPA y responde `/healthz`.
+**Front, API y agente van en una sola imagen.** El `Dockerfile` de la raíz compila este front en modo API, la API .NET y el MCP de SQL Server. La API sirve el front desde `wwwroot` y expone `/api` y `/health`.
 
-El `Dockerfile` está en la raíz del repositorio, y el contexto de build también es la raíz:
+- `VITE_DATA_API_URL` vacía (valor por defecto) hace que el front llame a `/api` en el mismo dominio.
+- Si más adelante el front llama a otra API, pon su URL. CORS se configura en la API con `Cors__AllowedOrigins`.
 
 ```bash
 # desde la raíz del repositorio
-docker build -t ad-data-assistant .
-docker run --rm -p 8080:8080 ad-data-assistant      # http://localhost:8080
+docker build --build-arg VITE_DATA_API_KEY=devkey -t ad-data-assistant .
+docker run --rm -p 8080:8080 -e Auth__ApiKey=devkey -e ANTHROPIC_API_KEY=… -e DATABASE_URL=… -e SqlMcp__Host=… ad-data-assistant
 ```
 
-**Render.** El blueprint `render.yaml` de la raíz define dos servicios:
-
-- **`ad-data-assistant-api`:** el backend, con `2.Server/Dockerfile`.
-- **`ad-data-assistant`:** este front, con `./Dockerfile`.
-
-Las variables `VITE_*` del servicio del front llegan a la compilación como build args. Si no las defines, la imagen se construye en modo maqueta.
-
-Para publicarlo:
-
-1. En Render, abre **New → Blueprint**.
-2. Elige el repositorio `josjimnzj/report-agent-ai` y la rama.
-3. Pulsa **Apply**.
-
-En el plan gratuito, el servicio se duerme tras 15 minutos sin tráfico y la primera visita después tarda unos 50 s.
+**Render.** `render.yaml` define un solo servicio web, `ad-data-assistant`, con comprobación de salud en `/health`. Las variables `VITE_*` del servicio llegan a la compilación como build args.
 
 ## Stack
 

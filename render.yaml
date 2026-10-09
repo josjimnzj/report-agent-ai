@@ -1,22 +1,23 @@
-# Blueprint de Render (plan gratuito): API con el agente y front. Los valores con sync:false se capturan en el panel.
+# Blueprint de Render (plan gratuito): un solo servicio con front + API + agente. Valores sync:false se capturan en el panel.
 services:
-  # API .NET 10 + agente Claude + MCP de SQL Server (proceso hijo). Guarda chats, reportes y ejecuciones en Neon.
   - type: web
-    name: ad-data-assistant-api
+    name: ad-data-assistant
     runtime: docker
     plan: free
-    dockerfilePath: ./2.Server/Dockerfile
+    dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: DATABASE_URL            # cadena de conexión de Neon (postgresql://…?sslmode=require)
+      - key: DATABASE_URL            # Neon: postgresql://…?sslmode=require
         sync: false
-      - key: Auth__ApiKey            # clave que el front envía en X-Api-Key
+      - key: Auth__ApiKey            # clave que exige /api (X-Api-Key)
         generateValue: true
-      - key: Cors__AllowedOrigins    # "*" o la URL del front
+      - key: VITE_DATA_API_KEY       # la misma clave, compilada en el front
+        sync: false
+      - key: Cors__AllowedOrigins    # solo hace falta si otra app llama a la API desde el navegador
         value: "*"
       - key: SqlMcp__Host
         sync: false
@@ -30,23 +31,3 @@ services:
         value: "false"
       - key: SqlMcp__TrustCert
         value: "true"
-
-  # Front (Vite + nginx). Las variables VITE_* se usan al compilar la imagen.
-  - type: web
-    name: ad-data-assistant
-    runtime: docker
-    plan: free
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    healthCheckPath: /healthz
-    autoDeploy: true
-    envVars:
-      - key: VITE_DATA_MODE          # "api" = backend real; "mock" = maqueta con datos en duro
-        value: api
-      - key: VITE_DATA_API_URL       # p. ej. https://ad-data-assistant-api.onrender.com
-        sync: false
-      - key: VITE_DATA_API_KEY
-        fromService:
-          type: web
-          name: ad-data-assistant-api
-          envVarKey: Auth__ApiKey

@@ -75,8 +75,14 @@ cd 2.Server && dotnet test
 # ADA_TEST_PG="Host=localhost;Port=5432;Username=postgres;Database=ada_test"
 ```
 
-El front se conecta en modo API con `VITE_DATA_MODE=api VITE_DATA_API_URL=http://localhost:5080 VITE_DATA_API_KEY=devkey npm run dev`.
+El front en desarrollo se conecta con `VITE_DATA_MODE=api VITE_DATA_API_URL=http://localhost:5080 VITE_DATA_API_KEY=devkey npm run dev`.
 
 ## Docker
 
-`2.Server/Dockerfile` (contexto: raíz del repositorio) compila addaccion-mcp-sql desde GitHub en un commit fijo (`MCP_COMMIT`), publica la API y deja ambos en la imagen `aspnet:10.0`, que se ejecuta sin root. Para actualizar el MCP, cambia `MCP_COMMIT`.
+El `Dockerfile` de la raíz construye una sola imagen:
+
+- El front compilado en `wwwroot`.
+- La API publicada.
+- addaccion-mcp-sql, compilado desde GitHub en un commit fijo (`MCP_COMMIT`; para actualizar el MCP, cambia ese valor).
+
+Corre sobre `aspnet:10.0`, sin root. La API sirve la SPA en cualquier ruta que no sea `/api` ni `/health`. CORS sigue disponible para clientes en otro dominio.

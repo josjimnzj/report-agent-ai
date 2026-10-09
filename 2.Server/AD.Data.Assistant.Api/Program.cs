@@ -63,6 +63,15 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseCors(); // antes de la API key: el preflight OPTIONS no lleva credenciales
+// Front compilado (wwwroot) servido por la misma API. index.html siempre revalidado; los assets llevan hash.
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = c => c.Context.Response.Headers.CacheControl =
+        c.Context.Request.Path.StartsWithSegments("/assets") ? "public, max-age=31536000, immutable" : "no-cache",
+});
+// El enrutado va después de los estáticos: si no, el fallback de la SPA captura también /assets.
+app.UseRouting();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
 app.Use(async (ctx, next) =>
 {
@@ -143,6 +152,9 @@ app.MapPut("/api/docs/{collection}/{id}", async (string collection, string id, H
 
 app.MapDelete("/api/docs/{collection}/{id}", async (string collection, string id, IDocumentStore store, CancellationToken ct) =>
     CheckDoc(collection, id) ?? (await store.DeleteAsync(collection, id, ct) ? Results.NoContent() : Results.NotFound()));
+
+// SPA: cualquier ruta que no sea /api ni /health devuelve index.html (si el front está incluido en la imagen).
+app.MapFallbackToFile("{*path:regex(^(?!api/|health$).*$)}", "index.html");
 
 app.Lifetime.ApplicationStopping.Register(() =>
     app.Services.GetRequiredService<SqlMcpClient>().DisposeAsync().AsTask().GetAwaiter().GetResult());
