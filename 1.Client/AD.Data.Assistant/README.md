@@ -17,12 +17,15 @@ npm run build      # dist/ → AD.Web/Views/DataAssistant/
 
 La imagen compila con Node 22, ejecuta las pruebas y sirve `dist/` con nginx sin root. nginx escucha en `$PORT` (Render lo inyecta; en local es 8080), redirige a `index.html` las rutas de la SPA y responde `/healthz`.
 
+El `Dockerfile` está en la raíz del repositorio, y el contexto de build también es la raíz:
+
 ```bash
+# desde la raíz del repositorio
 docker build -t ad-data-assistant .
 docker run --rm -p 8080:8080 ad-data-assistant      # http://localhost:8080
 ```
 
-**Render.** El blueprint `render.yaml` está en la raíz del repositorio: servicio web Docker, plan gratuito, `rootDir: 1.Client/AD.Data.Assistant` y comprobación de salud en `/healthz`. No necesita variables de entorno.
+**Render.** Funciona sin configurar nada, porque Render busca `./Dockerfile` en la raíz. El blueprint `render.yaml`, también en la raíz, define un servicio web Docker en el plan gratuito con comprobación de salud en `/healthz`. No necesita variables de entorno.
 
 Para publicarlo:
 
