@@ -55,22 +55,30 @@ src/
   stores/         chats y reports (persistidos), prefs (persistido), session (chat activo, no persistido)
   components/     ChatSidebar, ChatPanel, AssistantMessage, LiveProgress, Composer, ReportPanel,
                   KpiCard, BranchBarChart, MonthlyTrendChart, DetailTable, ShareDoughnut,
-                  InsightsList, ResultGrid, SqlPanel, PromptDialog, ChatDetailsDialog
+                  InsightsList, ResultGrid, SqlPanel, PromptDialog, ChatDetailsDialog,
+                  KebabMenu, ModelPicker
   views/          AssistantView (menú + chat + resultados)
-test/             salesReport.test.js, persist.test.js, tags.test.js
+test/             salesReport.test.js, persist.test.js, tags.test.js, models.test.js
 ```
 
 ## Qué hace la maqueta
 
 - **Menú lateral.**
-  - Conversaciones guardadas: abrir, fijar, editar título y etiquetas, y eliminar.
-  - Reportes guardados.
+  - Conversaciones guardadas. El menú «⋯» de cada una permite fijarla arriba, editar el título y las etiquetas, o eliminarla.
+  - Reportes guardados. El menú «⋯» de cada uno permite abrirlo, renombrarlo o eliminarlo.
   - Búsqueda por título o etiqueta, y menú colapsable.
 - **Etiquetas.**
   - Hasta 6 por conversación, de texto libre.
-  - Se asignan al guardar el chat o después, con el botón de etiqueta de la cabecera o con el lápiz del menú.
+  - Se asignan al guardar el chat o después, desde el menú «⋯» de la cabecera del chat abierto o del menú lateral.
   - No se duplican aunque cambien mayúsculas o acentos.
   - En el menú, las etiquetas en uso aparecen como filtros.
+- **Chat abierto.** Su cabecera tiene el mismo menú «⋯»: guardar (si aún no está guardado), fijar, editar título y etiquetas, nuevo chat y eliminar.
+- **Modelo y esfuerzo.**
+  - Se eligen en el selector bajo la caja de texto, con el mismo catálogo que `GET /api/models` (`src/mocks/models.js`): Claude Opus, Sonnet, Fable y Haiku, y Gemini Flash y Flash-Lite.
+  - Las reglas son las de la API: Haiku no admite esfuerzo y Gemini solo tiene Bajo, Medio y Alto (Muy alto y Máximo se rebajan a Alto).
+  - La elección se recuerda en el navegador y cada respuesta indica con qué modelo y esfuerzo se hizo.
+  - Al pasar de Claude a Gemini, o al revés, la pregunta va como conversación nueva en el servidor y el chat lo avisa.
+  - En la maqueta, el esfuerzo y el modelo cambian la duración simulada.
 - **Pantallas pequeñas (menos de 1200 px).**
   - Se ve una vista a la vez, Chat o Resultados, con un selector arriba.
   - El menú se abre como cajón lateral.
@@ -105,6 +113,6 @@ test/             salesReport.test.js, persist.test.js, tags.test.js
 ## Pendiente (fase 3)
 
 - Cliente SSE real (`fetch` + `ReadableStream`) contra `POST /api/agent/query/stream`, seleccionado con `VITE_DATA_MODE=api`. La clave se pone en `.env.<amb>.local`.
-- Traza y Log, ajustes de modelo y valoración 👍/👎. Están en el plan pero no tienen sentido con datos en duro.
+- Traza y Log, razonamiento visible, máximo de iteraciones y valoración 👍/👎. Están en el plan pero no tienen sentido con datos en duro.
 - Interpretar resultados genéricos (`chartGuess`). Hoy el dashboard asume el resultado de ventas por mes y sucursal.
 - Usuario real de la sesión del CEM. Hoy son las iniciales en duro `JG`.

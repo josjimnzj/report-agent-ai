@@ -17,6 +17,10 @@ export const useReportsStore = defineStore('reports', {
       this.reports.push(report);
       return report;
     },
+    rename(id, title) {
+      const r = this.reports.find((x) => x.id === id);
+      if (r && title.trim()) r.title = title.trim();
+    },
     remove(id) {
       this.reports = this.reports.filter((r) => r.id !== id);
     },

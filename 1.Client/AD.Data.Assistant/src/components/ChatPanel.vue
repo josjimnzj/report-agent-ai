@@ -4,35 +4,21 @@
       <div class="min-w-0 flex-1">
         <h1 class="m-0 truncate text-[18px] font-semibold text-ink" :title="title">
           {{ title }}
-          <span v-if="session.dirty" class="ml-1 align-middle text-[11px] font-normal text-ink-muted">· sin guardar</span>
+          <button
+            v-if="session.dirty"
+            type="button"
+            class="ml-1 cursor-pointer border-0 bg-transparent p-0 align-middle text-[11.5px] font-normal text-brandlight underline-offset-2 hover:underline"
+            title="Guardar chat"
+            @click="$emit('save')"
+          >
+            · sin guardar · Guardar
+          </button>
         </h1>
         <div v-if="session.chat.tags?.length" class="mt-1 flex flex-wrap gap-1" aria-label="Etiquetas">
           <span v-for="t in session.chat.tags" :key="t" class="tag-chip tag-chip-sm">{{ t }}</span>
         </div>
       </div>
-      <button type="button" class="icon-btn" title="Nuevo chat" @click="$emit('new-chat')">
-        <i class="fa-solid fa-pen-to-square" aria-hidden="true" /><span class="sr-only">Nuevo chat</span>
-      </button>
-      <button
-        v-if="session.isSaved"
-        type="button"
-        class="icon-btn"
-        title="Editar título y etiquetas"
-        @click="$emit('edit')"
-      >
-        <i class="fa-solid fa-tag" aria-hidden="true" /><span class="sr-only">Editar título y etiquetas</span>
-      </button>
-      <button
-        v-else
-        type="button"
-        class="icon-btn"
-        :class="session.dirty ? 'text-brandlight' : ''"
-        title="Guardar chat"
-        :disabled="!session.chat.turns.length"
-        @click="$emit('save')"
-      >
-        <i class="fa-solid fa-floppy-disk" aria-hidden="true" /><span class="sr-only">Guardar chat</span>
-      </button>
+      <KebabMenu label="Acciones del chat" :items="menu" @select="onAction" />
       <button
         v-if="!compact"
         type="button"
@@ -99,13 +85,39 @@ import { CURRENT_USER } from '@/mocks/seeds';
 import AssistantMessage from './AssistantMessage.vue';
 import Composer from './Composer.vue';
 import SuggestionList from './SuggestionList.vue';
+import KebabMenu from './KebabMenu.vue';
+import { useChatsStore } from '@/stores/chats';
+import { confirm } from 'devextreme/ui/dialog';
 
 defineProps({ compact: Boolean });
 const emit = defineEmits(['new-chat', 'save', 'edit', 'show-results']);
 
 const session = useSessionStore();
 const prefs = usePrefsStore();
+const chats = useChatsStore();
 const scroller = ref(null);
+
+// Mismo menú «⋯» que el de cada conversación del panel lateral.
+const pinned = computed(() => Boolean(session.savedId && chats.byId(session.savedId)?.pinned));
+const menu = computed(() => [
+  { id: 'save', text: 'Guardar chat', icon: 'fa-solid fa-floppy-disk', visible: !session.isSaved && session.chat.turns.length > 0 },
+  { id: 'pin', text: pinned.value ? 'Desfijar' : 'Fijar arriba', icon: 'fa-solid fa-thumbtack', visible: session.isSaved },
+  { id: 'edit', text: 'Editar título y etiquetas', icon: 'fa-solid fa-pen', visible: session.isSaved },
+  { id: 'new', text: 'Nuevo chat', icon: 'fa-solid fa-plus' },
+  { id: 'delete', text: 'Eliminar', icon: 'fa-solid fa-trash', danger: true, visible: session.isSaved },
+]);
+
+async function onAction(action) {
+  if (action === 'save') emit('save');
+  else if (action === 'pin') chats.togglePin(session.savedId);
+  else if (action === 'edit') emit('edit');
+  else if (action === 'new') emit('new-chat');
+  else if (action === 'delete') {
+    if (!(await confirm(`¿Eliminar el chat «${session.chat.title}»? Esta acción no se puede deshacer.`, 'Eliminar chat'))) return;
+    chats.remove(session.savedId);
+    session.newChat();
+  }
+}
 
 const title = computed(() => session.chat.title || 'Chat');
 const time = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '');

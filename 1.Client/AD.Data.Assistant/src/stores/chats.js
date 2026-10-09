@@ -28,6 +28,7 @@ export const useChatsStore = defineStore('chats', {
         createdAt: chat.createdAt ?? Date.now(),
         updatedAt: Date.now(),
         conversationId: chat.conversationId ?? null,
+        provider: chat.provider ?? null,
         // Copia profunda: el chat activo de la sesión no debe compartir referencias con lo guardado.
         turns: JSON.parse(JSON.stringify(chat.turns.filter((t) => t.status !== 'running'))).map(compactTurn),
       };

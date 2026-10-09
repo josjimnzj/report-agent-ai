@@ -8,6 +8,9 @@ export const usePrefsStore = defineStore('prefs', {
     sidebarCollapsed: false,
     chatExpanded: false,
     months: 6,
+    // null = el valor por defecto del catálogo (/api/models).
+    model: null,
+    effort: null,
   }),
   persist: { key: 'ada.prefs', storage: safeStorage },
 });

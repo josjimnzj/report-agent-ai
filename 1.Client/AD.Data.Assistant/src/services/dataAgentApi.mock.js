@@ -3,6 +3,7 @@
 // para que la fase 3 solo cambie este módulo por el cliente real.
 
 import { MOCK_PHASES, SALES_COLUMNS, SALES_QUERIES, SALES_ROWS } from '@/mocks/salesByBranch';
+import { MODELS_RESPONSE } from '@/mocks/models';
 import { buildReport, fmtPct, topBranches } from '@/shared/salesReport';
 
 const wait = (ms, signal) => new Promise((resolve, reject) => {
@@ -50,15 +51,26 @@ function answerFor(question) {
   };
 }
 
+/** GET /api/models */
+export async function getModels() {
+  await wait(250);
+  return structuredClone(MODELS_RESPONSE);
+}
+
+// La simulación tarda más con más esfuerzo y menos con los modelos rápidos.
+const EFFORT_FACTOR = { low: 0.6, medium: 0.8, high: 1, xhigh: 1.3, max: 1.6 };
+const MODEL_FACTOR = { 'claude-sonnet-5-5': 0.8, 'claude-haiku-4-5': 0.5, 'claude-fable-5-1': 1.2, 'gemini-2.5-flash': 0.7, 'gemini-2.5-flash-lite': 0.5 };
+
 /**
- * @param {{ question: string, conversationId?: string|null }} body
+ * @param {{ question: string, conversationId?: string|null, model?: string, effort?: string|null }} body
  * @param {{ signal?: AbortSignal, onEvent?: (e: object) => void }} [opts]
  */
 export async function streamQuery(body, { signal, onEvent = () => {} } = {}) {
   const started = performance.now();
+  const factor = (EFFORT_FACTOR[body.effort] ?? 1) * (MODEL_FACTOR[body.model] ?? 1);
   for (const phase of MOCK_PHASES) {
     onEvent({ type: 'status', phase: phase.id, label: phase.label, at: performance.now() });
-    await wait(phase.ms, signal);
+    await wait(Math.round(phase.ms * factor), signal);
   }
   const { answer, branches } = answerFor(body.question);
   const done = {

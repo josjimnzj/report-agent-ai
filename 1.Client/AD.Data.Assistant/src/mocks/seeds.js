@@ -24,10 +24,14 @@ const salesTurn = {
   view: { branches: null },
   elapsedMs: 10200,
   runId: 'seed-run-1',
+  model: 'claude-opus-5-5',
+  modelLabel: 'Claude Opus 5.5',
+  effort: 'high',
+  provider: 'anthropic',
 };
 
 const chat = (id, title, tags, turns = [], updatedAt = at('2026-10-08T09:00:00')) => ({
-  id, title, tags, pinned: false, createdAt: updatedAt, updatedAt, conversationId: null, turns,
+  id, title, tags, pinned: false, createdAt: updatedAt, updatedAt, conversationId: turns.length ? `seed-conv-${id}` : null, provider: turns.at(-1)?.provider ?? null, turns,
 });
 
 export const SEED_CHATS = [

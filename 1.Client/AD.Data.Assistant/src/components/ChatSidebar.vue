@@ -62,7 +62,7 @@
           <li v-for="c in visibleChats" :key="c.id" class="group relative">
             <button
               type="button"
-              class="flex w-full cursor-pointer flex-col items-start gap-1 rounded-lg border-0 px-2.5 py-2 text-left [@media(hover:none)]:pr-[92px]"
+              class="flex w-full cursor-pointer flex-col items-start gap-1 rounded-lg border-0 py-2 pl-2.5 pr-10 text-left"
               :class="c.id === activeChatId ? 'bg-[#e6f4fb]' : 'bg-transparent hover:bg-canvas'"
               :title="c.title"
               :aria-current="c.id === activeChatId ? 'page' : undefined"
@@ -70,23 +70,18 @@
             >
               <span class="flex w-full items-center gap-2 pr-1">
                 <span class="flex-1 truncate text-[13.5px]" :class="c.id === activeChatId ? 'font-semibold text-brandblue' : 'text-ink'">{{ c.title }}</span>
-                <i v-if="c.pinned" class="fa-solid fa-thumbtack text-[11px] text-ink-muted group-hover:invisible" aria-label="Fijado" />
+                <i v-if="c.pinned" class="fa-solid fa-thumbtack text-[11px] text-ink-muted" aria-label="Fijado" />
               </span>
               <span v-if="c.tags?.length" class="flex flex-wrap gap-1">
                 <span v-for="t in c.tags" :key="t" class="tag-chip tag-chip-sm">{{ t }}</span>
               </span>
             </button>
-            <div class="absolute right-1 top-1.5 flex items-center rounded-md bg-white/95 opacity-0 shadow-sm transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-              <button type="button" class="icon-btn h-7 w-7" :title="c.pinned ? 'Desfijar' : 'Fijar'" @click="chats.togglePin(c.id)">
-                <i class="fa-solid fa-thumbtack text-[12px]" :class="c.pinned ? 'text-brandlight' : ''" aria-hidden="true" />
-              </button>
-              <button type="button" class="icon-btn h-7 w-7" title="Editar título y etiquetas" @click="editing = c">
-                <i class="fa-solid fa-pen text-[12px]" aria-hidden="true" />
-              </button>
-              <button type="button" class="icon-btn h-7 w-7" title="Eliminar" @click="removeChat(c)">
-                <i class="fa-solid fa-trash text-[12px]" aria-hidden="true" />
-              </button>
-            </div>
+            <KebabMenu
+              class="absolute right-1 top-1"
+              :label="`Acciones de «${c.title}»`"
+              :items="chatMenu(c)"
+              @select="(a) => onChatAction(a, c)"
+            />
           </li>
           <li v-if="!visibleChats.length" class="px-2 py-2 text-[13px] muted">Sin coincidencias.</li>
         </ul>
@@ -105,7 +100,7 @@
           <li v-for="r in visibleReports" :key="r.id" class="group relative">
             <button
               type="button"
-              class="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 px-2 py-2 text-left text-[13.5px]"
+              class="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 py-2 pl-2 pr-10 text-left text-[13.5px]"
               :class="r.id === activeReportId ? 'bg-[#e6f4fb] text-brandblue font-medium' : 'bg-transparent hover:bg-canvas'"
               :title="r.title"
               @click="$emit('open-report', r)"
@@ -113,11 +108,12 @@
               <i class="fa-solid w-4 text-center text-[15px]" :class="KIND[r.kind]?.icon ?? 'fa-file'" :style="{ color: KIND[r.kind]?.color }" aria-hidden="true" />
               <span class="flex-1 truncate">{{ r.title }}</span>
             </button>
-            <div class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center rounded-md bg-white/95 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-              <button type="button" class="icon-btn h-7 w-7" title="Eliminar reporte" @click="removeReport(r)">
-                <i class="fa-solid fa-trash text-[12px]" aria-hidden="true" />
-              </button>
-            </div>
+            <KebabMenu
+              class="absolute right-1 top-1/2 -translate-y-1/2"
+              :label="`Acciones de «${r.title}»`"
+              :items="REPORT_MENU"
+              @select="(a) => onReportAction(a, r)"
+            />
           </li>
           <li v-if="!visibleReports.length" class="px-2 py-2 text-[13px] muted">Sin coincidencias.</li>
         </ul>
@@ -133,6 +129,14 @@
       </nav>
     </template>
 
+    <PromptDialog
+      :visible="renamingReport !== null"
+      title="Renombrar reporte"
+      label="Nombre del reporte"
+      :value="renamingReport?.title ?? ''"
+      @confirm="confirmRenameReport"
+      @cancel="renamingReport = null"
+    />
     <ChatDetailsDialog
       :visible="editing !== null"
       title="Editar chat"
@@ -155,12 +159,14 @@ import { usePrefsStore } from '@/stores/prefs';
 import { useSessionStore } from '@/stores/session';
 import { tagKey } from '@/shared/tags';
 import ChatDetailsDialog from './ChatDetailsDialog.vue';
+import KebabMenu from './KebabMenu.vue';
+import PromptDialog from './PromptDialog.vue';
 
 const props = defineProps({
   // Dentro del cajón móvil: siempre expandido y con botón de cerrar.
   drawer: Boolean,
 });
-defineEmits(['open-chat', 'new-chat', 'open-report', 'close']);
+const emit = defineEmits(['open-chat', 'new-chat', 'open-report', 'close']);
 
 const LIMIT = 7;
 const KIND = {
@@ -180,6 +186,18 @@ const activeTag = ref(null);
 const showAllChats = ref(false);
 const showAllReports = ref(false);
 const editing = ref(null);
+const renamingReport = ref(null);
+
+const chatMenu = (c) => [
+  { id: 'pin', text: c.pinned ? 'Desfijar' : 'Fijar arriba', icon: 'fa-solid fa-thumbtack' },
+  { id: 'edit', text: 'Editar título y etiquetas', icon: 'fa-solid fa-pen' },
+  { id: 'delete', text: 'Eliminar', icon: 'fa-solid fa-trash', danger: true },
+];
+const REPORT_MENU = [
+  { id: 'open', text: 'Abrir', icon: 'fa-solid fa-chart-column' },
+  { id: 'rename', text: 'Renombrar', icon: 'fa-solid fa-pen' },
+  { id: 'delete', text: 'Eliminar', icon: 'fa-solid fa-trash', danger: true },
+];
 
 const collapsed = computed(() => !props.drawer && prefs.sidebarCollapsed);
 const activeChatId = computed(() => session.savedId);
@@ -200,6 +218,21 @@ const filteredReports = computed(() => reports.sorted.filter((r) => matchesText(
 const visibleReports = computed(() =>
   showAllReports.value || search.value ? filteredReports.value : filteredReports.value.slice(0, LIMIT));
 
+function onChatAction(action, c) {
+  if (action === 'pin') chats.togglePin(c.id);
+  else if (action === 'edit') editing.value = c;
+  else if (action === 'delete') removeChat(c);
+}
+function onReportAction(action, r) {
+  if (action === 'open') emit('open-report', r);
+  else if (action === 'rename') renamingReport.value = r;
+  else if (action === 'delete') removeReport(r);
+}
+function confirmRenameReport(title) {
+  reports.rename(renamingReport.value.id, title);
+  if (session.reportOverride?.id === renamingReport.value.id) session.reportOverride.title = title;
+  renamingReport.value = null;
+}
 function confirmEdit({ title, tags }) {
   session.updateChat(editing.value.id, { title, tags });
   editing.value = null;

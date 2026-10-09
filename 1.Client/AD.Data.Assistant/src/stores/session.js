@@ -4,9 +4,11 @@ import { newId } from '@/shared/ids';
 import { $notify } from '@/shared/notify';
 import { normalizeTags } from '@/shared/tags';
 import { useChatsStore } from './chats';
+import { useModelsStore } from './models';
+import { PROVIDER_LABELS } from '@/shared/models';
 import { SALES_COLUMNS, SALES_QUERIES, SALES_ROWS } from '@/mocks/salesByBranch';
 
-const blankChat = () => ({ id: newId(), title: '', tags: [], conversationId: null, turns: [], createdAt: Date.now() });
+const blankChat = () => ({ id: newId(), title: '', tags: [], conversationId: null, provider: null, turns: [], createdAt: Date.now() });
 
 // Estado del chat activo. No se persiste: un chat solo se guarda con «Guardar».
 export const useSessionStore = defineStore('session', {
@@ -92,9 +94,20 @@ export const useSessionStore = defineStore('session', {
     async ask(question) {
       const q = question.trim();
       if (!q || this.running) return;
+      const models = useModelsStore();
+      await models.load();
+      const run = models.current ?? { model: null, label: 'Modelo por defecto', effort: null, provider: null };
+      // El historial del servidor es de un proveedor: al cambiar de Claude a Gemini (o al revés) empieza conversación nueva.
+      let note = null;
+      if (this.chat.provider && run.provider && run.provider !== this.chat.provider && this.chat.conversationId) {
+        note = `Cambiaste de ${PROVIDER_LABELS[this.chat.provider]} a ${PROVIDER_LABELS[run.provider]}: la pregunta se envió como conversación nueva en el servidor. El hilo de aquí se conserva.`;
+        this.chat.conversationId = null;
+      }
+      this.chat.provider = run.provider;
       const turn = {
         id: newId(), question: q, askedAt: Date.now(), status: 'running', answer: '', phases: [],
         columns: [], rows: [], queries: [], view: null, elapsedMs: 0, runId: null,
+        model: run.model, modelLabel: run.label, effort: run.effort, provider: run.provider, note,
       };
       this.chat.turns.push(turn);
       const live = this.chat.turns.at(-1);
@@ -104,7 +117,7 @@ export const useSessionStore = defineStore('session', {
       const closePhase = (at) => { if (last) last.ms = Math.round(at - last.startedAt); };
       try {
         const done = await streamQuery(
-          { question: q, conversationId: this.chat.conversationId },
+          { question: q, conversationId: this.chat.conversationId, model: run.model, effort: run.effort },
           {
             signal: this.controller.signal,
             onEvent: (e) => {
