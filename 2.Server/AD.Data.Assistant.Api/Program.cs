@@ -5,6 +5,7 @@ using AD.Data.Assistant.Api.Agent;
 using AD.Data.Assistant.Api.Http;
 using AD.Data.Assistant.Api.Options;
 using AD.Data.Assistant.Api.Storage;
+using AD.Data.Assistant.Api.Telemetry;
 using Anthropic;
 using Microsoft.Extensions.Options;
 
@@ -27,6 +28,12 @@ builder.Services.Configure<SqlMcpOptions>(builder.Configuration.GetSection("SqlM
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
 builder.Services.PostConfigure<StorageOptions>(o => o.ConnectionString ??= Environment.GetEnvironmentVariable("DATABASE_URL"));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
+// Telemetría en otra base (o la misma con otra cadena): Telemetry__ConnectionString o, como en workflow-agent-api, Open__Telemetry.
+builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
+builder.Services.PostConfigure<TelemetryOptions>(o =>
+{
+    if (string.IsNullOrWhiteSpace(o.ConnectionString)) o.ConnectionString = builder.Configuration["Open:Telemetry"];
+});
 
 var corsOrigins = (builder.Configuration.GetSection("Cors").Get<CorsOptions>() ?? new CorsOptions()).Origins;
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
@@ -52,6 +59,8 @@ builder.Services.AddSingleton(sp =>
         ? new AnthropicClient { ApiKey = o.ApiKey }
         : new AnthropicClient { ApiKey = o.ApiKey, BaseUrl = o.BaseUrl };
 });
+builder.Services.AddSingleton<TelemetryStore>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TelemetryStore>());
 builder.Services.AddSingleton<SqlMcpClient>();
 builder.Services.AddSingleton<ModelCatalog>();
 builder.Services.AddSingleton<PromptStore>();
@@ -85,7 +94,7 @@ app.Use(async (ctx, next) =>
 
 var commit = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? Environment.GetEnvironmentVariable("GIT_COMMIT");
 var startedAt = DateTimeOffset.UtcNow;
-app.MapGet("/health", (IDocumentStore store, IOptions<AnthropicOptions> ai) => Results.Ok(new
+app.MapGet("/health", (IDocumentStore store, IOptions<AnthropicOptions> ai, TelemetryStore tel) => Results.Ok(new
 {
     status = "ok",
     commit = commit is { Length: >= 7 } ? commit[..7] : commit ?? "dev",
@@ -93,6 +102,7 @@ app.MapGet("/health", (IDocumentStore store, IOptions<AnthropicOptions> ai) => R
     storage = store.Kind,
     storageError = StoreInitializer.LastError,
     anthropic = !string.IsNullOrWhiteSpace(ai.Value.ApiKey),
+    telemetry = tel.Enabled,
 }));
 
 app.MapGet("/api/models", (ModelCatalog c) => Results.Ok(new
@@ -152,6 +162,46 @@ app.MapPut("/api/docs/{collection}/{id}", async (string collection, string id, H
 
 app.MapDelete("/api/docs/{collection}/{id}", async (string collection, string id, IDocumentStore store, CancellationToken ct) =>
     CheckDoc(collection, id) ?? (await store.DeleteAsync(collection, id, ct) ? Results.NoContent() : Results.NotFound()));
+
+// --- Telemetría: registro y valoración de ejecuciones (base aparte) ---
+IResult TelemetryOff() => Results.Json(new { error = "La telemetría no está configurada (Telemetry__ConnectionString u Open__Telemetry)." }, statusCode: 503);
+
+app.MapGet("/api/telemetry/status", (TelemetryStore t) => Results.Ok(new { enabled = t.Enabled, lastError = t.LastError, retentionDays = t.Options.RetentionDays }));
+
+app.MapPost("/api/feedback", async (FeedbackRequest req, TelemetryStore t, CancellationToken ct) =>
+{
+    if (!t.Enabled) return TelemetryOff();
+    if (!Guid.TryParse(req.RunId, out var id) || req.Rating is not (1 or -1)) return Results.BadRequest(new { error = "runId (guid) y rating (1 o -1) son obligatorios." });
+    if (req.Comment is { Length: > 2000 } || req.Tags is { Length: > 20 }) return Results.BadRequest(new { error = "Comentario o etiquetas demasiado largos." });
+    return await t.SaveFeedbackAsync(new FeedbackInput(id, req.Rating, req.Tags, req.Comment), ct)
+        ? Results.Ok(new { saved = true })
+        : Results.NotFound(new { error = "Esta respuesta no está en el registro (es anterior a la telemetría o ya se depuró) y no se puede valorar." });
+});
+
+static RunFilter ToFilter(int? days, int? rating, string? model, string? mode, string? status, string? q) =>
+    new(days ?? 30, rating is 1 or -1 or 0 ? rating : null, model, mode, status, q);
+
+app.MapGet("/api/telemetry/runs", async (int? days, int? rating, string? model, string? mode, string? status, string? q, int? limit, int? offset, TelemetryStore t, CancellationToken ct) =>
+    !t.Enabled ? TelemetryOff() : Results.Ok(await t.RecentAsync(ToFilter(days, rating, model, mode, status, q), Math.Clamp(limit ?? 50, 1, 500), Math.Max(offset ?? 0, 0), ct)));
+
+app.MapGet("/api/telemetry/summary", async (int? days, int? rating, string? model, string? mode, string? status, string? q, TelemetryStore t, CancellationToken ct) =>
+    !t.Enabled ? TelemetryOff() : Results.Ok(await t.SummaryAsync(ToFilter(days, rating, model, mode, status, q), ct)));
+
+app.MapGet("/api/telemetry/facets", async (TelemetryStore t, CancellationToken ct) =>
+    !t.Enabled ? TelemetryOff() : Results.Ok(await t.FacetsAsync(ct)));
+
+// Exportación: CSV (Excel) o JSON; detail=1 añade filas de muestra, eventos y traza (solo JSON).
+app.MapGet("/api/telemetry/export", async (HttpContext ctx, TelemetryStore t, string? format, string? detail, int? days, int? rating, string? model, string? mode, string? status, string? q, int? max) =>
+{
+    if (!t.Enabled) { ctx.Response.StatusCode = 503; await ctx.Response.WriteAsJsonAsync(new { error = "La telemetría no está configurada." }); return; }
+    var json = string.Equals(format, "json", StringComparison.OrdinalIgnoreCase);
+    ctx.Response.ContentType = json ? "application/json; charset=utf-8" : "text/csv; charset=utf-8";
+    ctx.Response.Headers.ContentDisposition = $"attachment; filename=\"ejecuciones-{DateTime.UtcNow:yyyyMMdd-HHmm}.{(json ? "json" : "csv")}\"";
+    await t.ExportAsync(ToFilter(days, rating, model, mode, status, q), json ? "json" : "csv", detail is "1" or "true" && json, Math.Clamp(max ?? 5000, 1, 20000), ctx.Response.Body, ctx.RequestAborted);
+});
+
+app.MapGet("/api/telemetry/runs/{id:guid}", async (Guid id, TelemetryStore t, CancellationToken ct) =>
+    !t.Enabled ? TelemetryOff() : await t.RunDetailJsonAsync(id, ct) is { } json ? Results.Content(json, "application/json") : Results.NotFound());
 
 // SPA: cualquier ruta que no sea /api ni /health devuelve index.html (si el front está incluido en la imagen).
 app.MapFallbackToFile("{*path:regex(^(?!api/|health$).*$)}", "index.html");

@@ -95,12 +95,35 @@
             <p class="m-0 text-[14px] leading-relaxed text-ink">{{ result.answer }}</p>
           </article>
           <article v-if="chart" class="card min-w-0 p-4">
-            <h3 class="section-title mb-2">{{ chartTitle }}</h3>
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <h3 class="section-title m-0 flex-1">{{ chartTitle }}</h3>
+              <div class="no-print flex rounded-lg border border-line bg-white p-0.5" role="radiogroup" aria-label="Tipo de gráfica">
+                <button
+                  v-for="c in CHART_TYPES"
+                  :key="c.id"
+                  type="button"
+                  role="radio"
+                  :aria-checked="chart.type === c.id"
+                  class="flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-2.5 py-1 text-[12.5px]"
+                  :class="chart.type === c.id ? 'bg-brandblue font-semibold text-white' : 'bg-transparent text-ink-soft hover:text-brandblue'"
+                  :title="c.label"
+                  @click="session.setChartType(c.id)"
+                >
+                  <i class="fa-solid" :class="c.icon" aria-hidden="true" /><span :class="narrow ? 'sr-only' : ''">{{ c.label }}</span>
+                </button>
+              </div>
+            </div>
+            <p v-if="result.askChart && !result.chartType" class="no-print m-0 mb-2 text-[12.5px] text-ink-soft">
+              <i class="fa-solid fa-circle-question mr-1 text-brandlight" aria-hidden="true" /> El asistente propuso esta gráfica; elige otro tipo si lo prefieres.
+            </p>
             <GenericChart :spec="chart" :columns="result.columns" :rows="result.rows" />
           </article>
-          <article class="card min-w-0 p-4">
-            <h3 class="section-title mb-3">Detalle</h3>
-            <ResultGrid :columns="result.columns" :rows="result.rows" :total-rows="result.totalRows" :truncated="result.truncated" />
+          <article v-else class="card flex gap-3 p-4">
+            <i class="fa-solid fa-table mt-0.5 text-ink-soft" aria-hidden="true" />
+            <p class="m-0 text-[13.5px] text-ink-soft">
+              Este resultado no tiene medidas numéricas para graficar. El detalle está en la pestaña
+              <button type="button" class="cursor-pointer border-0 bg-transparent p-0 font-semibold text-brandlight underline" @click="tab = 'table'">Tabla</button>.
+            </p>
           </article>
         </div>
         <div v-else-if="tab === 'results'" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
@@ -117,26 +140,29 @@
               <MonthlyTrendChart :report="report" />
             </article>
           </div>
-          <div class="grid gap-4" :class="wider ? 'grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]' : 'grid-cols-1'">
-            <article class="card min-w-0 p-4">
-              <h3 class="section-title mb-3">Detalle de ventas por sucursal</h3>
-              <DetailTable :report="report" />
-            </article>
+          <div class="grid gap-4" :class="wider ? 'grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]' : 'grid-cols-1'">
             <article class="card min-w-0 p-4">
               <h3 class="section-title mb-3">Participación de ventas por sucursal</h3>
               <ShareDoughnut :report="report" />
             </article>
+            <article class="card min-w-0 p-5">
+              <h3 class="section-title mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-lightbulb text-brandlight" aria-hidden="true" /> Insights clave
+              </h3>
+              <InsightsList :insights="insights" :columns="wider ? 2 : (wide ? 2 : 1)" />
+            </article>
           </div>
-          <article class="card p-5">
-            <h3 class="section-title mb-4 flex items-center gap-2">
-              <i class="fa-solid fa-lightbulb text-brandlight" aria-hidden="true" /> Insights clave
-            </h3>
-            <InsightsList :insights="insights" :columns="wider ? 4 : 2" />
-          </article>
         </div>
 
-        <div v-else-if="tab === 'table'" id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="card p-4">
-          <ResultGrid :columns="result.columns" :rows="result.rows" :total-rows="result.totalRows" :truncated="result.truncated" />
+        <div v-else-if="tab === 'table'" id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="flex flex-col gap-4">
+          <article v-if="sales" class="card min-w-0 p-4">
+            <h3 class="section-title mb-3">Resumen por sucursal</h3>
+            <DetailTable :report="report" />
+          </article>
+          <article class="card min-w-0 p-4">
+            <h3 v-if="sales" class="section-title mb-3">Detalle</h3>
+            <ResultGrid :columns="result.columns" :rows="result.rows" :total-rows="result.totalRows" :truncated="result.truncated" />
+          </article>
         </div>
 
         <div v-else-if="tab === 'sql'" id="panel-sql" role="tabpanel" aria-labelledby="tab-sql">
@@ -173,8 +199,8 @@ import { PERIODS, buildInsights, buildMarkdown, buildReport } from '@/shared/sal
 import KpiCard from './KpiCard.vue';
 import BranchBarChart from './BranchBarChart.vue';
 import MonthlyTrendChart from './MonthlyTrendChart.vue';
-import DetailTable from './DetailTable.vue';
 import ShareDoughnut from './ShareDoughnut.vue';
+import DetailTable from './DetailTable.vue';
 import InsightsList from './InsightsList.vue';
 import ResultGrid from './ResultGrid.vue';
 import SqlPanel from './SqlPanel.vue';
@@ -183,7 +209,7 @@ import KebabMenu from './KebabMenu.vue';
 import GenericChart from './GenericChart.vue';
 import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
 import { IS_API } from '@/services/mode';
-import { chartSpec, genericMarkdown, isSalesResult } from '@/shared/resultView';
+import { CHART_TYPES, chartSpec, genericMarkdown, isSalesResult } from '@/shared/resultView';
 import { fmtInt } from '@/shared/salesReport';
 
 const TABS = [
@@ -240,8 +266,13 @@ function actionContext() {
 }
 const sales = computed(() => Boolean(result.value) && isSalesResult(result.value.columns));
 const tabs = computed(() => (sales.value ? TABS : TABS.filter((t) => t.id !== 'insights')));
-const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart) : null));
-const chartTitle = computed(() => (chart.value ? `${chart.value.y.join(', ')} por ${chart.value.x}` : ''));
+const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart, result.value.chartType) : null));
+const chartTitle = computed(() => {
+  const c = chart.value;
+  if (!c) return '';
+  if (c.transpose) return 'Indicadores';
+  return c.x === '#' ? c.y.join(', ') : `${c.y.join(', ')} por ${c.x}`;
+});
 const report = computed(() => (sales.value
   ? buildReport(result.value.columns, result.value.rows, { months: prefs.months, branches: result.value.branches })
   : null));
@@ -262,6 +293,7 @@ const description = computed(() => {
 });
 
 watch(() => result.value?.id, () => { tab.value = 'results'; editingTitle.value = false; });
+watch(() => session.revealTick, () => { tab.value = 'results'; });
 
 function startEditTitle() {
   draftTitle.value = title.value;

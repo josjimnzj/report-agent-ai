@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SALES_COLUMNS } from '../src/mocks/salesByBranch.js';
-import { chartSpec, columnKinds, formatValue, genericMarkdown, isMoneyColumn, isSalesResult } from '../src/shared/resultView.js';
+import { chartData, chartSpec, columnKinds, MAX_BAR, MAX_PIE, formatValue, genericMarkdown, isMoneyColumn, isSalesResult } from '../src/shared/resultView.js';
 
 const cols = ['Mes', 'Ventas', 'Monto'];
 const rows = [['2026-01', 10, 1500.5], ['2026-02', 12, 1800], ['2026-03', 9, null]];
@@ -30,10 +30,33 @@ test('chartSpec usa la sugerencia si es coherente y si no la deduce', () => {
   assert.deepEqual(chartSpec(cols, rows, { type: 'bar', x: 'Mes', y: ['Monto', 'Inventada'] }), { type: 'bar', x: 'Mes', y: ['Monto'] });
   assert.deepEqual(chartSpec(cols, rows, null), { type: 'line', x: 'Mes', y: ['Ventas', 'Monto'] });
   assert.deepEqual(chartSpec(['Sucursal', 'N'], [['A', 1], ['B', 2]], { type: 'none', x: '', y: [] }), { type: 'bar', x: 'Sucursal', y: ['N'] });
-  assert.equal(chartSpec(['N'], [[1], [2]], null), null);
-  assert.equal(chartSpec(cols, rows.slice(0, 1), null), null);
-  // pie solo con pocas categorías y una serie
-  assert.equal(chartSpec(['S', 'N'], [['A', 1], ['B', 2]], { type: 'pie', x: 'S', y: ['N'] }).type, 'pie');
+  assert.equal(chartSpec(['Sucursal'], [['A'], ['B']], null), null); // sin medidas no hay gráfica
+  assert.equal(chartSpec(cols, [], null), null);
+  assert.deepEqual(chartSpec(cols, rows.slice(0, 1), null), { type: 'line', x: 'Mes', y: ['Ventas', 'Monto'] });
+  assert.deepEqual(chartSpec(['S', 'N', 'M'], [['A', 1, 2]], { type: 'pie', x: 'S', y: ['N', 'M'] }), { type: 'pie', x: 'S', y: ['N'] });
+});
+
+test('el reporte siempre grafica: solo medidas, una medida suelta y el tipo elegido por el usuario', () => {
+  const totals = chartSpec(['Ventas', 'Monto'], [[12, 5000]], null);
+  assert.deepEqual(totals, { type: 'bar', x: 'Indicador', y: ['Valor'], transpose: true });
+  assert.deepEqual(chartData(totals, ['Ventas', 'Monto'], [[12, 5000]]).data, [{ Indicador: 'Ventas', Valor: 12 }, { Indicador: 'Monto', Valor: 5000 }]);
+  assert.deepEqual(chartSpec(['Anio', 'Ventas'], [[2025, 1], [2026, 2]], null), { type: 'line', x: 'Anio', y: ['Ventas'] });
+  const single = chartSpec(['N'], [[1], [2]], null);
+  assert.equal(single.x, '#');
+  assert.deepEqual(chartData(single, ['N'], [[1], [2]]).data.map((d) => d['#']), [1, 2]);
+  assert.equal(chartSpec(cols, rows, { type: 'bar', x: 'Mes', y: ['Monto'] }, 'pie').type, 'pie');
+  assert.equal(chartSpec(cols, rows, null, 'otro').type, 'line');
+});
+
+test('chartData agrupa el pastel en «Otros» y recorta las barras', () => {
+  const many = Array.from({ length: 70 }, (_, i) => [`S${i}`, 100 - i]);
+  const pie = chartData({ type: 'pie', x: 'S', y: ['N'] }, ['S', 'N'], many);
+  assert.equal(pie.data.length, MAX_PIE);
+  assert.equal(pie.data.at(-1).S, 'Otros');
+  assert.equal(pie.data.reduce((a, d) => a + d.N, 0), many.reduce((a, r) => a + r[1], 0));
+  const bar = chartData({ type: 'bar', x: 'S', y: ['N'] }, ['S', 'N'], many);
+  assert.equal(bar.data.length, MAX_BAR);
+  assert.ok(bar.truncated);
 });
 
 test('genericMarkdown incluye respuesta, tabla y SQL', () => {

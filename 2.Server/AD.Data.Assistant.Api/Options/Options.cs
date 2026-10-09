@@ -62,3 +62,20 @@ public sealed class CorsOptions
     public string[] Origins => (AllowedOrigins ?? "").Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .Select(o => o.TrimEnd('/')).ToArray();
 }
+
+/// <summary>
+/// Registro de ejecuciones y valoraciones (👍/👎) en Postgres, en una base aparte de la de documentos.
+/// Variable: Telemetry__ConnectionString (también Open__Telemetry). Sin cadena, el registro queda desactivado.
+/// </summary>
+public sealed class TelemetryOptions
+{
+    public string? ConnectionString { get; set; }
+    /// <summary>Días que se conservan las ejecuciones SIN valoración. Las valoradas se conservan siempre.</summary>
+    public int RetentionDays { get; set; } = 90;
+    /// <summary>Tope de bytes de eventos por ejecución.</summary>
+    public int MaxEventBytes { get; set; } = 300_000;
+    public int MaxToolResultChars { get; set; } = 4000;
+    /// <summary>Filas de ejemplo del resultado que se guardan (los datos pueden ser sensibles).</summary>
+    public int RowSample { get; set; } = 20;
+    public bool Enabled => !string.IsNullOrWhiteSpace(ConnectionString);
+}

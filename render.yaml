@@ -13,6 +13,8 @@ services:
         sync: false
       - key: DATABASE_URL            # Neon: postgresql://…?sslmode=require
         sync: false
+      - key: Open__Telemetry         # opcional: Postgres aparte para telemetría (o Telemetry__ConnectionString)
+        sync: false
       - key: Auth__ApiKey            # clave que exige /api (X-Api-Key)
         generateValue: true
       - key: VITE_DATA_API_KEY       # la misma clave, compilada en el front

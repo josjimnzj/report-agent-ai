@@ -42,6 +42,37 @@
       </span>
     </button>
 
+    <div v-if="turn.status === 'ok' && turn.askChart" class="-mt-1 flex flex-wrap items-center gap-1.5 pl-1" role="group" aria-label="Tipo de gráfica">
+      <span class="text-[12px] text-ink-soft">¿Cómo quieres la gráfica?</span>
+      <button
+        v-for="c in CHART_TYPES"
+        :key="c.id"
+        type="button"
+        class="quick-action"
+        :class="turn.view?.chartType === c.id ? 'border-brandlight font-semibold text-brandblue' : ''"
+        :aria-pressed="turn.view?.chartType === c.id"
+        @click="$emit('chart', c.id)"
+      >
+        <i class="fa-solid" :class="c.icon" aria-hidden="true" /> {{ c.label }}
+      </button>
+    </div>
+
+    <div v-if="rateable && turn.runId && (turn.status === 'ok' || turn.status === 'max_iterations') && turn.kind !== 'report'" class="-mt-1 flex items-center gap-1 pl-1" role="group" aria-label="Valorar la respuesta">
+      <span class="mr-1 text-[12px] muted">{{ turn.rating ? 'Gracias por valorar' : '¿Te sirvió?' }}</span>
+      <button
+        v-for="r in RATINGS"
+        :key="r.value"
+        type="button"
+        class="icon-btn h-7 w-7"
+        :class="turn.rating === r.value ? r.active : 'text-ink-soft'"
+        :title="r.label"
+        :aria-pressed="turn.rating === r.value"
+        @click="$emit('rate', r.value)"
+      >
+        <i :class="[turn.rating === r.value ? 'fa-solid' : 'fa-regular', r.icon]" aria-hidden="true" /><span class="sr-only">{{ r.label }}</span>
+      </button>
+    </div>
+
     <div v-if="turn.status === 'ok' && !IS_API" class="-mt-1 flex flex-wrap gap-1.5 pl-1" role="group" aria-label="Acciones con este resultado">
       <button v-for="a in QUICK_ACTIONS" :key="a.id" type="button" class="quick-action" @click="$emit('action', a.id)">
         <i :class="a.icon" aria-hidden="true" /> {{ a.text }}
@@ -58,6 +89,7 @@
 <script setup>
 import { effortLabel } from '@/shared/models';
 import { IS_API } from '@/services/mode';
+import { CHART_TYPES } from '@/shared/resultView';
 import LiveProgress from './LiveProgress.vue';
 
 defineProps({
@@ -65,8 +97,14 @@ defineProps({
   selected: Boolean,
   selectable: Boolean,
   compact: Boolean,
+  rateable: Boolean,
 });
-defineEmits(['select', 'action']);
+defineEmits(['select', 'action', 'chart', 'rate']);
+
+const RATINGS = [
+  { value: 1, label: 'Respuesta útil', icon: 'fa-thumbs-up', active: 'text-good' },
+  { value: -1, label: 'Respuesta incorrecta o poco útil', icon: 'fa-thumbs-down', active: 'text-bad' },
+];
 
 const QUICK_ACTIONS = [
   { id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn' },

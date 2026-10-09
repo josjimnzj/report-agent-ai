@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { streamQuery } from '@/services/dataAgentApi';
+import { sendFeedback } from '@/services/telemetryApi';
 import { newId } from '@/shared/ids';
 import { $notify } from '@/shared/notify';
 import { normalizeTags } from '@/shared/tags';
@@ -31,6 +32,7 @@ export const useSessionStore = defineStore('session', {
     reportTitle: null,
     reportOverride: null, // reporte guardado abierto: { id, title, months, branches, columns, rows, queries }
     controller: null,
+    revealTick: 0, // sube cuando el usuario pidió ver el resultado en el reporte
   }),
   getters: {
     turnsWithData: (s) => s.chat.turns.filter((t) => (t.status === 'ok' || t.status === 'max_iterations') && t.columns?.length),
@@ -44,6 +46,7 @@ export const useSessionStore = defineStore('session', {
       const t = this.selectedTurn;
       return t ? {
         id: t.id, title: null, question: t.question, answer: t.answer, chart: t.view?.chart ?? null,
+        chartType: t.view?.chartType ?? null, askChart: Boolean(t.askChart),
         branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
         queries: t.queries, totalRows: t.totalRows ?? t.rows.length, truncated: Boolean(t.truncated),
       } : null;
@@ -95,7 +98,8 @@ export const useSessionStore = defineStore('session', {
         return {
           id: report.id, title: report.title, months: report.months ?? 6, branches: report.branches ?? null,
           columns: report.result.columns, rows: report.result.rows, queries: report.result.queries,
-          answer: report.result.answer, chart: report.result.chart, totalRows: report.result.totalRows, reportId: report.id,
+          answer: report.result.answer, chart: report.result.chart, chartType: report.result.chartType ?? null,
+          totalRows: report.result.totalRows, reportId: report.id,
         };
       }
       if (report.source !== 'sales') {
@@ -121,7 +125,7 @@ export const useSessionStore = defineStore('session', {
         id: newId(), kind: 'report', reportId: report.id, question: `Editar el reporte «${report.title}»`,
         askedAt: Date.now(), answeredAt: Date.now(), status: 'ok', phases: [],
         answer, columns: data.columns, rows: data.rows, queries: data.queries, totalRows: data.totalRows,
-        view: { branches: data.branches, chart: data.chart ?? null }, reportAnswer: data.answer ?? null,
+        view: { branches: data.branches, chart: data.chart ?? null, chartType: data.chartType ?? null }, reportAnswer: data.answer ?? null,
         elapsedMs: 0, runId: null,
       });
       this.reportTitle = report.title;
@@ -133,6 +137,31 @@ export const useSessionStore = defineStore('session', {
       if (!data) return false;
       this.reportOverride = data;
       return true;
+    },
+    /** Tipo de gráfica elegido por el usuario para un turno (o para el reporte guardado abierto). */
+    setChartType(type, turnId = null) {
+      if (this.reportOverride && !turnId) {
+        this.reportOverride = { ...this.reportOverride, chartType: type };
+        return;
+      }
+      const turn = turnId ? this.chat.turns.find((t) => t.id === turnId) : this.selectedTurn;
+      if (!turn) return;
+      turn.view = { ...(turn.view ?? {}), chartType: type };
+      this.persistIfSaved();
+    },
+    /** Valoración 👍/👎 de una respuesta (telemetría del servidor). */
+    async rate(turnId, rating) {
+      const turn = this.chat.turns.find((t) => t.id === turnId);
+      if (!turn?.runId) return;
+      const previous = turn.rating ?? null;
+      turn.rating = rating;
+      try {
+        await sendFeedback(turn.runId, rating);
+        this.persistIfSaved();
+      } catch (err) {
+        turn.rating = previous;
+        $notify.handleError(err);
+      }
     },
     stop() {
       this.controller?.abort();
@@ -181,12 +210,13 @@ export const useSessionStore = defineStore('session', {
         Object.assign(live, {
           status: done.status, answer: done.answer, columns: done.columns, rows: done.rows, totalRows: done.totalRows ?? done.rows?.length,
           queries: done.queries, view: done.view, elapsedMs: done.elapsedMs, runId: done.runId, answeredAt: Date.now(),
-          servedBy: done.servedBy ?? null,
+          servedBy: done.servedBy ?? null, askChart: Boolean(done.askChart), openReport: Boolean(done.openReport), rating: null,
         });
         this.chat.conversationId = done.conversationId;
         this.selectedTurnId = live.id;
         this.reportOverride = null;
         this.reportTitle = null;
+        if (done.openReport) this.revealTick += 1;
       } catch (err) {
         closePhase(performance.now());
         live.status = err?.name === 'AbortError' ? 'stopped' : 'error';

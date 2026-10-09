@@ -119,6 +119,12 @@ watch(() => session.result?.id, (id, old) => {
   if (compact.value && id && id !== old && view.value === 'chat') unseenResult.value = true;
 });
 
+// «Muéstramelo en el reporte»: el agente lo marca y se abre Resultados (en escritorio se pliega el chat ampliado).
+watch(() => session.revealTick, () => {
+  if (compact.value) setView('results');
+  else prefs.chatExpanded = false;
+});
+
 const defaultTitle = computed(() => session.chat.title || session.chat.turns[0]?.question.slice(0, 60) || '');
 
 /** Pide confirmación antes de abandonar un chat con cambios sin guardar. */

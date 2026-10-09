@@ -58,7 +58,10 @@
             :selectable="compact || session.turnsWithData.length > 1"
             :compact="compact"
             @select="selectTurn(t)"
+            :rateable="telemetryOn"
             @action="(mode) => $emit('report-action', mode, turnContext(t))"
+            @chart="(type) => { session.setChartType(type, t.id); selectTurn(t); }"
+            @rate="(rating) => session.rate(t.id, rating)"
           />
         </template>
 
@@ -85,6 +88,7 @@ import { DEFAULT_REPORT_TITLE, EMPTY_STATE_SUGGESTIONS, FOLLOW_UP_SUGGESTIONS, S
 import { IS_API } from '@/services/mode';
 import { CURRENT_USER } from '@/mocks/seeds';
 import AssistantMessage from './AssistantMessage.vue';
+import { telemetryEnabled } from '@/services/telemetryApi';
 import Composer from './Composer.vue';
 import SuggestionList from './SuggestionList.vue';
 import KebabMenu from './KebabMenu.vue';
@@ -93,6 +97,10 @@ import { confirm } from 'devextreme/ui/dialog';
 
 defineProps({ compact: Boolean });
 const emit = defineEmits(['new-chat', 'save', 'edit', 'show-results', 'report-action']);
+
+// Los botones de valoración solo aparecen si el servidor registra ejecuciones.
+const telemetryOn = ref(false);
+telemetryEnabled().then((on) => { telemetryOn.value = on; });
 
 const session = useSessionStore();
 const prefs = usePrefsStore();

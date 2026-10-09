@@ -36,11 +36,17 @@ public class AgentTests
     [Fact]
     public void ParseAnswer_lee_respuesta_consulta_principal_y_grafica()
     {
-        var (answer, index, chart) = DataAgent.ParseAnswer("""{"answer":"Centro lidera.","resultQuery":2,"chart":{"type":"bar","x":"Sucursal","y":["Monto"]}}""");
+        var (answer, index, chart, askChart, openReport) = DataAgent.ParseAnswer("""{"answer":"Centro lidera.","resultQuery":2,"chart":{"type":"bar","x":"Sucursal","y":["Monto"]},"askChart":false,"openReport":true}""");
         Assert.Equal("Centro lidera.", answer);
         Assert.Equal(2, index);
         Assert.Equal(new ChartHint("bar", "Sucursal", ["Monto"]).Type, chart!.Type);
         Assert.Equal(["Monto"], chart.Y);
+        Assert.False(askChart);
+        Assert.True(openReport);
+
+        var ask = DataAgent.ParseAnswer("""{"answer":"¿Barras o pastel?","resultQuery":1,"chart":{"type":"bar","x":"A","y":["B"]},"askChart":true}""");
+        Assert.True(ask.AskChart);
+        Assert.False(ask.OpenReport);
 
         var none = DataAgent.ParseAnswer("""{"answer":"Sin datos.","resultQuery":0,"chart":{"type":"none","x":"","y":[]}}""");
         Assert.Null(none.Chart);
@@ -97,5 +103,16 @@ public class AgentTests
         })
             await tracker.OnEventAsync(new AgentEvent(type, new { tool }));
         Assert.Equal(["interpret", "schema", "sql", "execute", "process", "schema"], phases);
+    }
+}
+
+public class PgConnectionTests
+{
+    [Fact]
+    public void Normalize_fuerza_ssl_salvo_que_la_url_lo_indique()
+    {
+        Assert.Contains("SSL Mode=Require", Storage.PgConnection.Normalize("postgresql://u:p@host/db"));
+        Assert.Contains("SSL Mode=Disable", Storage.PgConnection.Normalize("postgresql://u@localhost:5433/db?sslmode=disable"));
+        Assert.Equal("Host=h;Database=d", Storage.PgConnection.Normalize("Host=h;Database=d"));
     }
 }

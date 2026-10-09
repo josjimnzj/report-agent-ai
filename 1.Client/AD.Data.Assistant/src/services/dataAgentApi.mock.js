@@ -85,6 +85,9 @@ export async function streamQuery(body, { signal, onEvent = () => {} } = {}) {
     usage: { inputTokens: 0, outputTokens: 0 },
     elapsedMs: Math.round(performance.now() - started),
     runId: newId(),
+    // Como el agente real: «muéstramelo en el reporte» abre Resultados.
+    openReport: /\b(reporte|gr[aá]fic[ao]|tablero|dashboard)\b/i.test(body.question),
+    askChart: false,
   };
   onEvent({ type: 'done', data: done, at: performance.now() });
   return done;

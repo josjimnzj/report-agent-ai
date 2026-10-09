@@ -26,17 +26,19 @@ public static class PgConnection
         b.Username = Uri.UnescapeDataString(ui[0]);
         if (ui.Length > 1) b.Password = Uri.UnescapeDataString(ui[1]);
 
+        var explicitSsl = false;
         foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
             var kv = pair.Split('=', 2);
             var v = kv.Length > 1 ? Uri.UnescapeDataString(kv[1]) : "";
             switch (kv[0].ToLowerInvariant())
             {
-                case "sslmode": b.SslMode = Enum.TryParse<SslMode>(v.Replace("-", ""), true, out var m) ? m : SslMode.Require; break;
+                case "sslmode": b.SslMode = Enum.TryParse<SslMode>(v.Replace("-", ""), true, out var m) ? m : SslMode.Require; explicitSsl = true; break;
                 case "channel_binding": b.ChannelBinding = Enum.TryParse<ChannelBinding>(v, true, out var cb) ? cb : ChannelBinding.Prefer; break;
             }
         }
-        if (b.SslMode == SslMode.Disable) b.SslMode = SslMode.Require;
+        // Neon exige SSL: sin sslmode en la URL se fuerza; un sslmode explícito (p. ej. disable en local) se respeta.
+        if (!explicitSsl) b.SslMode = SslMode.Require;
         return b.ConnectionString;
     }
 }

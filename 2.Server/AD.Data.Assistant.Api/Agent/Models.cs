@@ -4,6 +4,8 @@ namespace AD.Data.Assistant.Api.Agent;
 
 public sealed record QueryRequest(string? Question, string? ConversationId = null, string? Model = null, string? Effort = null, int? MaxIterations = null);
 
+public sealed record FeedbackRequest(string? RunId, int Rating, string[]? Tags = null, string? Comment = null);
+
 public sealed record ToolCallTrace(string Tool, long DurationMs, bool IsError);
 
 public sealed record UsageInfo(long InputTokens, long OutputTokens, long CacheReadTokens, long CacheCreationTokens);
@@ -25,7 +27,13 @@ public sealed record QueryResponse(
     string? Effort,
     string? ServedBy,
     ChartHint? Chart,
-    long TotalRows);
+    long TotalRows,
+    bool AskChart = false,
+    bool OpenReport = false);
+
+/// <param name="AskChart">El agente no tuvo claro qué gráfica quiere el usuario y se lo pregunta en la respuesta.</param>
+/// <param name="OpenReport">El usuario pidió ver el resultado en el reporte.</param>
+public sealed record AnswerParts(string Answer, int ResultQuery, ChartHint? Chart, bool AskChart, bool OpenReport);
 
 /// <summary>Gráfica sugerida por el agente para el resultado principal.</summary>
 public sealed record ChartHint(string Type, string X, IReadOnlyList<string> Y);

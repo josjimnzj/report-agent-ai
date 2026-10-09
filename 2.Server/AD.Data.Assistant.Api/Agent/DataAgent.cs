@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using AD.Data.Assistant.Api.Storage;
+using AD.Data.Assistant.Api.Telemetry;
 using Anthropic.Models.Beta.Messages;
 
 namespace AD.Data.Assistant.Api.Agent;
@@ -15,7 +16,7 @@ public sealed class PromptStore
 /// Agente de consulta de datos: arma el historial de la conversación (guardado en Neon), ejecuta el bucle con las
 /// herramientas del MCP, captura en el servidor los resultados reales de execute_query y registra la ejecución.
 /// </summary>
-public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog catalog, IDocumentStore store, PromptStore prompts, TimeProvider time, ILogger<DataAgent> log)
+public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog catalog, IDocumentStore store, PromptStore prompts, TelemetryStore telemetry, TimeProvider time, ILogger<DataAgent> log)
 {
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -41,9 +42,11 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
           },
           "required": ["type", "x", "y"],
           "additionalProperties": false
-        }
+        },
+        "askChart": { "type": "boolean" },
+        "openReport": { "type": "boolean" }
       },
-      "required": ["answer", "resultQuery", "chart"],
+      "required": ["answer", "resultQuery", "chart", "askChart", "openReport"],
       "additionalProperties": false
     }
     """).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
@@ -54,8 +57,14 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         var settings = catalog.Resolve(req.Model, req.Effort);
         var maxIter = catalog.ResolveIterations(req.MaxIterations);
         var conversationId = string.IsNullOrWhiteSpace(req.ConversationId) ? Guid.NewGuid().ToString("N") : req.ConversationId.Trim();
-        var runId = Guid.NewGuid().ToString("N");
+        var runGuid = Guid.NewGuid();
+        var runId = runGuid.ToString("N");
         var sw = Stopwatch.StartNew();
+        // Telemetría (base aparte): captura los eventos de la ejecución si está configurada.
+        var recorder = telemetry.Enabled
+            ? new RunRecorder(telemetry.Options, runGuid, "query", question, new(conversationId, settings.Model, settings.Effort, true, maxIter, false), Commit)
+            : null;
+        if (recorder is not null) emit = recorder.Wrap(emit);
         var phases = new PhaseTracker(emit);
 
         try
@@ -79,31 +88,37 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
                 var last = results.LastOrDefault();
                 response = Build(conversationId, runId, "max_iterations", run, settings, sw.ElapsedMilliseconds,
                     string.IsNullOrWhiteSpace(run.FinalText) ? $"El agente usó las {maxIter} iteraciones permitidas sin terminar. Puedes reformular la pregunta o subir el esfuerzo." : run.FinalText,
-                    last, results, null);
+                    last, results, null, null);
             }
             else
             {
-                var (answer, index, chart) = ParseAnswer(run.FinalText);
-                var main = index >= 1 && index <= results.Count ? results[index - 1] : null;
-                response = Build(conversationId, runId, "ok", run, settings, sw.ElapsedMilliseconds, answer, main, results, chart);
+                var parts = ParseAnswer(run.FinalText);
+                var main = parts.ResultQuery >= 1 && parts.ResultQuery <= results.Count ? results[parts.ResultQuery - 1] : null;
+                response = Build(conversationId, runId, "ok", run, settings, sw.ElapsedMilliseconds, parts.Answer, main, results, parts.Chart, parts);
             }
 
             await SaveTurnAsync(conv, settings.Model, question, response, ct);
             await SaveRunAsync(runId, conversationId, question, settings, response, null, ct);
+            if (recorder is not null) telemetry.Enqueue(recorder.Complete(response));
             return response;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
-            await SaveRunAsync(runId, conversationId, question, settings, null, ex.Message, CancellationToken.None);
+            if (ex is not OperationCanceledException)
+                await SaveRunAsync(runId, conversationId, question, settings, null, ex.Message, CancellationToken.None);
+            if (recorder is not null) telemetry.Enqueue(recorder.Fail(ex));
             throw;
         }
     }
 
     private static QueryResponse Build(string conversationId, string runId, string status, AgentRunResult run, RunSettings settings, long ms,
-        string answer, QueryResult? main, List<QueryResult> results, ChartHint? chart) =>
+        string answer, QueryResult? main, List<QueryResult> results, ChartHint? chart, AnswerParts? parts) =>
         new(conversationId, status, run.Iterations, answer,
             main?.Columns ?? [], main?.Rows ?? [], results.Select(r => r.Sql).ToList(), run.Trace, run.Usage, ms,
-            runId, settings.Model, settings.Effort, run.ServedBy, chart, main?.RowCount ?? 0);
+            runId, settings.Model, settings.Effort, run.ServedBy, chart, main?.RowCount ?? 0,
+            AskChart: parts?.AskChart ?? false, OpenReport: parts?.OpenReport ?? false);
+
+    private static readonly string? Commit = (Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? Environment.GetEnvironmentVariable("GIT_COMMIT")) is { Length: >= 7 } c ? c[..7] : null;
 
     /// <summary>Historial compacto: cada turno previo como pregunta + respuesta con su SQL y una muestra de filas.</summary>
     internal static List<BetaMessageParam> BuildMessages(ConversationDoc conv, string question, DateTimeOffset now)
@@ -163,12 +178,12 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
 
     private static string Cap(string s) => s.Length <= MaxToolTextChars ? s : s[..MaxToolTextChars] + "\n… [recortado]";
 
-    /// <summary>Lee el JSON final { answer, resultQuery, chart }. Si el modelo no lo respetó, el texto se usa como respuesta.</summary>
-    internal static (string Answer, int ResultQuery, ChartHint? Chart) ParseAnswer(string text)
+    /// <summary>Lee el JSON final { answer, resultQuery, chart, askChart, openReport }. Si el modelo no lo respetó, el texto se usa como respuesta.</summary>
+    internal static AnswerParts ParseAnswer(string text)
     {
         var t = text.Trim();
         var i = t.IndexOf('{'); var j = t.LastIndexOf('}');
-        if (i < 0 || j <= i) return (t, 0, null);
+        if (i < 0 || j <= i) return new(t, 0, null, false, false);
         try
         {
             using var doc = JsonDocument.Parse(t[i..(j + 1)]);
@@ -183,9 +198,10 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
                 var y = ch.TryGetProperty("y", out var ye) && ye.ValueKind == JsonValueKind.Array ? ye.EnumerateArray().Select(e => e.GetString() ?? "").ToList() : [];
                 chart = new ChartHint(type, x, y);
             }
-            return (answer, index, chart);
+            bool Flag(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+            return new(answer, index, chart, Flag("askChart"), Flag("openReport"));
         }
-        catch (JsonException) { return (t, 0, null); }
+        catch (JsonException) { return new(t, 0, null, false, false); }
     }
 
     private async Task<ConversationDoc> LoadConversationAsync(string id, CancellationToken ct)
