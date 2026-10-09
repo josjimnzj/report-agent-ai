@@ -65,7 +65,7 @@ public sealed class CorsOptions
 
 /// <summary>
 /// Registro de ejecuciones y valoraciones (👍/👎) en Postgres, en una base aparte de la de documentos.
-/// Variable: Telemetry__ConnectionString (también Open__Telemetry). Sin cadena, el registro queda desactivado.
+/// Variable: Telemetry__ConnectionString. Sin cadena, el registro queda desactivado.
 /// </summary>
 public sealed class TelemetryOptions
 {

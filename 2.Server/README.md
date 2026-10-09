@@ -56,14 +56,14 @@ Campañas, segmentos y publicar en el menú **aún no tienen backend**. En el fr
 | `SqlMcp__Host`, `__Port`, `__Database`, `__User`, `__Password`, `__Encrypt`, `__TrustCert` | SQL Server del CEM (solo lectura) |
 | `SqlMcp__Script` | Ruta del MCP compilado (en la imagen: `/opt/addaccion-mcp-sql/dist/index.js`) |
 | `Anthropic__Model` / `__Effort` / `__DefaultMaxIterations` | Valores por defecto |
-| `Open__Telemetry` o `Telemetry__ConnectionString` | Opcional. Postgres **aparte** (otra base u otra cadena de Neon) para la telemetría. Sin valor, la telemetría está apagada |
+| `Telemetry__ConnectionString` | Opcional. Postgres **aparte** (otra base u otra cadena de Neon) para la telemetría. Sin valor, la telemetría está apagada |
 | `Telemetry__RetentionDays` / `__RowSample` / `__MaxEventBytes` / `__MaxToolResultChars` | Retención (90 días para ejecuciones sin valoración), filas de muestra (20) y recortes del log |
 
 `GET /health` informa el almacenamiento (`neon` o `memory`), si Neon dio error al arrancar, si hay clave de Anthropic y si la telemetría está activa.
 
 ## Telemetría
 
-Portada de workflow-agent-api. Con `Open__Telemetry` (o `Telemetry__ConnectionString`) cada ejecución del agente se guarda en la tabla `runs` de **esa** base: pregunta, respuesta, SQL, modelo, esfuerzo, estado, iteraciones, tokens, duración, versión, muestra de filas, eventos y traza. Las valoraciones 👍/👎 del chat van a `feedback`. El esquema se crea solo al arrancar y las escrituras van por una cola en segundo plano: si la base está dormida o caída, el usuario no lo nota. Acepta URL `postgresql://…` (SSL forzado salvo `sslmode` explícito) o cadena clave=valor.
+Portada de workflow-agent-api. Con `Telemetry__ConnectionString` cada ejecución del agente se guarda en la tabla `runs` de **esa** base: pregunta, respuesta, SQL, modelo, esfuerzo, estado, iteraciones, tokens, duración, versión, muestra de filas, eventos y traza. Las valoraciones 👍/👎 del chat van a `feedback`. El esquema se crea solo al arrancar y las escrituras van por una cola en segundo plano: si la base está dormida o caída, el usuario no lo nota. Acepta URL `postgresql://…` (SSL forzado salvo `sslmode` explícito) o cadena clave=valor.
 
 | Endpoint | Uso |
 |---|---|

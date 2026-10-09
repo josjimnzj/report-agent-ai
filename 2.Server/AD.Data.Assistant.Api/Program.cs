@@ -28,12 +28,8 @@ builder.Services.Configure<SqlMcpOptions>(builder.Configuration.GetSection("SqlM
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
 builder.Services.PostConfigure<StorageOptions>(o => o.ConnectionString ??= Environment.GetEnvironmentVariable("DATABASE_URL"));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
-// Telemetría en otra base (o la misma con otra cadena): Telemetry__ConnectionString o, como en workflow-agent-api, Open__Telemetry.
+// Telemetría en otra base (o la misma con otra cadena): Telemetry__ConnectionString.
 builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
-builder.Services.PostConfigure<TelemetryOptions>(o =>
-{
-    if (string.IsNullOrWhiteSpace(o.ConnectionString)) o.ConnectionString = builder.Configuration["Open:Telemetry"];
-});
 
 var corsOrigins = (builder.Configuration.GetSection("Cors").Get<CorsOptions>() ?? new CorsOptions()).Origins;
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
@@ -164,7 +160,7 @@ app.MapDelete("/api/docs/{collection}/{id}", async (string collection, string id
     CheckDoc(collection, id) ?? (await store.DeleteAsync(collection, id, ct) ? Results.NoContent() : Results.NotFound()));
 
 // --- Telemetría: registro y valoración de ejecuciones (base aparte) ---
-IResult TelemetryOff() => Results.Json(new { error = "La telemetría no está configurada (Telemetry__ConnectionString u Open__Telemetry)." }, statusCode: 503);
+IResult TelemetryOff() => Results.Json(new { error = "La telemetría no está configurada (Telemetry__ConnectionString)." }, statusCode: 503);
 
 app.MapGet("/api/telemetry/status", (TelemetryStore t) => Results.Ok(new { enabled = t.Enabled, lastError = t.LastError, retentionDays = t.Options.RetentionDays }));
 

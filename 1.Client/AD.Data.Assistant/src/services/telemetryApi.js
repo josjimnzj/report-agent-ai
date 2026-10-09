@@ -4,7 +4,7 @@ import { IS_API } from './mode';
 
 let status = null;
 
-/** true si el servidor registra ejecuciones (Telemetry__ConnectionString u Open__Telemetry). Se consulta una vez. */
+/** true si el servidor registra ejecuciones (Telemetry__ConnectionString). Se consulta una vez. */
 export function telemetryEnabled() {
   if (!IS_API) return Promise.resolve(false);
   status ??= apiFetch('/api/telemetry/status').then((r) => r.json()).then((s) => Boolean(s.enabled)).catch(() => {

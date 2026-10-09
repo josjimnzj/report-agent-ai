@@ -13,7 +13,7 @@ services:
         sync: false
       - key: DATABASE_URL            # Neon: postgresql://…?sslmode=require
         sync: false
-      - key: Open__Telemetry         # opcional: Postgres aparte para telemetría (o Telemetry__ConnectionString)
+      - key: Telemetry__ConnectionString   # opcional: Postgres aparte para telemetría
         sync: false
       - key: Auth__ApiKey            # clave que exige /api (X-Api-Key)
         generateValue: true
