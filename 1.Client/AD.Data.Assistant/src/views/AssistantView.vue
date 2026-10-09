@@ -1,12 +1,12 @@
 <template>
   <!-- Escritorio (≥ 1200 px): menú, chat y resultados lado a lado. -->
   <main v-if="!compact" class="flex h-full gap-4 p-4">
-    <ChatSidebar @new-chat="newChat" @open-chat="openChat" @open-report="openReport" />
+    <ChatSidebar @new-chat="newChat" @open-chat="openChat" @open-report="openReport" @edit-report="editReport" @report-action="openAction" />
     <div class="shrink-0 transition-[width] duration-200" :class="prefs.chatExpanded ? 'w-[min(720px,50vw)]' : 'w-[360px]'">
-      <ChatPanel @new-chat="newChat" @save="saving = true" @edit="editing = true" />
+      <ChatPanel @new-chat="newChat" @save="saving = true" @edit="editing = true" @report-action="openAction" />
     </div>
     <div class="min-w-0 flex-1">
-      <ReportPanel />
+      <ReportPanel @report-action="openAction" @edit-report="editReport" />
     </div>
   </main>
 
@@ -34,8 +34,8 @@
     </nav>
 
     <div class="min-h-0 flex-1">
-      <ChatPanel v-show="view === 'chat'" compact @new-chat="newChat" @save="saving = true" @edit="editing = true" @show-results="setView('results')" />
-      <ReportPanel v-if="view === 'results'" />
+      <ChatPanel v-show="view === 'chat'" compact @new-chat="newChat" @save="saving = true" @edit="editing = true" @show-results="setView('results')" @report-action="openAction" />
+      <ReportPanel v-if="view === 'results'" @report-action="openAction" @edit-report="editReport" />
     </div>
 
     <Transition name="fade">
@@ -43,11 +43,12 @@
     </Transition>
     <Transition name="slide">
       <div v-if="drawerOpen" class="fixed inset-y-0 left-0 z-[1401] w-[min(320px,88vw)] p-2" role="dialog" aria-modal="true" aria-label="Conversaciones y reportes" @keydown.esc="drawerOpen = false">
-        <ChatSidebar drawer @close="drawerOpen = false" @new-chat="newChat" @open-chat="openChat" @open-report="openReport" />
+        <ChatSidebar drawer @close="drawerOpen = false" @new-chat="newChat" @open-chat="openChat" @open-report="openReport" @edit-report="editReport" @report-action="openAction" />
       </div>
     </Transition>
   </main>
 
+  <ReportActionDialog />
   <ChatDetailsDialog
     :visible="saving"
     title="Guardar chat"
@@ -80,6 +81,8 @@ import ChatSidebar from '@/components/ChatSidebar.vue';
 import ChatPanel from '@/components/ChatPanel.vue';
 import ReportPanel from '@/components/ReportPanel.vue';
 import ChatDetailsDialog from '@/components/ChatDetailsDialog.vue';
+import ReportActionDialog from '@/components/ReportActionDialog.vue';
+import { useActionsStore } from '@/stores/actions';
 
 const VIEWS = [
   { id: 'chat', label: 'Chat', icon: 'fa-comments' },
@@ -89,6 +92,7 @@ const VIEWS = [
 const session = useSessionStore();
 const chats = useChatsStore();
 const prefs = usePrefsStore();
+const actions = useActionsStore();
 const saving = ref(false);
 const editing = ref(false);
 
@@ -141,6 +145,22 @@ function openReport(report) {
   prefs.months = report.months ?? prefs.months;
   drawerOpen.value = false;
   setView('results');
+}
+/** Campaña, segmento o publicación a partir de un reporte (del chat, de Resultados o guardado). */
+function openAction(mode, context) {
+  drawerOpen.value = false;
+  actions.open(mode, context);
+}
+/** Lleva un reporte guardado a una conversación nueva para seguir editándolo. */
+async function editReport(report) {
+  if (!report) return;
+  const ok = await guard(() => {
+    if (session.openReportInNewChat(report)) prefs.months = report.months ?? prefs.months;
+  });
+  if (ok) {
+    drawerOpen.value = false;
+    setView('chat');
+  }
 }
 function saveChat({ title, tags }) {
   session.saveChat(title, tags);

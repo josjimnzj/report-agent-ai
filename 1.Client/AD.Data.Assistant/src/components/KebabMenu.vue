@@ -3,20 +3,24 @@
     <button
       :id="buttonId"
       type="button"
-      class="icon-btn h-8 w-8"
-      :class="open ? 'bg-canvas text-brandblue' : ''"
+      :class="text ? ['btn', primary ? 'btn-primary' : ''] : ['icon-btn h-8 w-8', open ? 'bg-canvas text-brandblue' : '']"
       :title="label"
       :aria-label="label"
       aria-haspopup="menu"
       :aria-expanded="open"
     >
-      <i class="fa-solid fa-ellipsis" aria-hidden="true" />
+      <template v-if="text">
+        <i v-if="icon" :class="icon" aria-hidden="true" />
+        <span :class="compactText ? 'sr-only' : ''">{{ text }}</span>
+        <i class="fa-solid fa-chevron-down text-[10px]" aria-hidden="true" />
+      </template>
+      <i v-else class="fa-solid fa-ellipsis" aria-hidden="true" />
     </button>
     <DxContextMenu
       :target="`#${buttonId}`"
       show-event="dxclick"
       :items="visibleItems"
-      :width="230"
+      :width="250"
       :position="{ my: 'right top', at: 'right bottom', offset: '0 4', collision: 'flipfit' }"
       item-template="menuItem"
       @item-click="onItemClick"
@@ -37,10 +41,14 @@
 import { computed, ref } from 'vue';
 import { DxContextMenu } from 'devextreme-vue/context-menu';
 
-// Menú «⋯» de acciones. items: [{ id, text, icon, danger?, visible? }]
+// Menú «⋯» de acciones (o botón con texto si se pasa `text`). items: [{ id, text, icon, danger?, visible?, beginGroup? }]
 const props = defineProps({
   items: { type: Array, required: true },
   label: { type: String, default: 'Más acciones' },
+  text: { type: String, default: '' },
+  icon: { type: String, default: '' },
+  primary: Boolean,
+  compactText: Boolean,
 });
 const emit = defineEmits(['select']);
 

@@ -27,6 +27,12 @@
             </button>
           </div>
           <p class="m-0 mt-1 text-ink-soft" :class="narrow ? 'text-[12.5px]' : 'text-[13.5px]'">{{ description }}</p>
+          <p v-if="session.reportOverride" class="no-print m-0 mt-2 flex flex-wrap items-center gap-2 text-[12.5px] text-ink-soft">
+            <span v-if="savedReport?.published" class="tag-chip tag-chip-sm"><i class="fa-solid fa-share-from-square" aria-hidden="true" /> Publicado en {{ savedReport.published.section }}</span>
+            <button type="button" class="btn py-1 text-[12.5px]" @click="$emit('edit-report', savedReport)">
+              <i class="fa-solid fa-comments" aria-hidden="true" /> Editar en una conversación nueva
+            </button>
+          </p>
         </div>
         <div class="no-print" :class="narrow ? 'w-full' : 'w-[210px]'">
           <DxSelectBox
@@ -57,6 +63,15 @@
           </button>
         </div>
         <div class="flex gap-2 py-2" :class="narrow ? 'w-full justify-end' : 'flex-wrap'">
+          <KebabMenu
+            text="Acciones"
+            icon="fa-solid fa-bolt"
+            primary
+            :compact-text="narrow"
+            label="Acciones sobre el reporte"
+            :items="REPORT_ACTIONS"
+            @select="(mode) => $emit('report-action', mode, actionContext())"
+          />
           <button
             v-for="a in ACTIONS"
             :key="a.id"
@@ -150,6 +165,8 @@ import InsightsList from './InsightsList.vue';
 import ResultGrid from './ResultGrid.vue';
 import SqlPanel from './SqlPanel.vue';
 import PromptDialog from './PromptDialog.vue';
+import KebabMenu from './KebabMenu.vue';
+import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
 
 const TABS = [
   { id: 'results', label: 'Resultados', icon: 'fa-chart-column' },
@@ -161,9 +178,15 @@ const ACTIONS = [
   { id: 'save', label: 'Guardar reporte', icon: 'fa-regular fa-bookmark' },
   { id: 'pdf', label: 'Exportar PDF', icon: 'fa-regular fa-file-pdf' },
   { id: 'md', label: 'Generar Markdown', icon: 'fa-brands fa-markdown' },
-  { id: 'share', label: 'Compartir', icon: 'fa-solid fa-share-nodes', primary: true },
+  { id: 'share', label: 'Compartir', icon: 'fa-solid fa-share-nodes' },
 ];
-const DEFAULT_TITLE = 'Análisis de ventas por sucursal';
+const DEFAULT_TITLE = DEFAULT_REPORT_TITLE;
+const REPORT_ACTIONS = [
+  { id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn' },
+  { id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' },
+  { id: 'publish', text: 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' },
+];
+defineEmits(['report-action', 'edit-report']);
 
 const session = useSessionStore();
 const prefs = usePrefsStore();
@@ -187,6 +210,15 @@ watch(body, (el, old) => { if (old) observer.unobserve(old); if (el) observer.ob
 onBeforeUnmount(() => observer.disconnect());
 
 const result = computed(() => session.result);
+const savedReport = computed(() => (session.reportOverride ? reports.reports.find((r) => r.id === session.reportOverride.id) ?? null : null));
+
+/** Lo que reciben los diálogos de acción: el reporte tal como se ve (título, periodo, sucursales y datos). */
+function actionContext() {
+  return {
+    title: title.value, months: prefs.months, branches: result.value.branches ?? null,
+    columns: result.value.columns, rows: result.value.rows, reportId: session.reportOverride?.id ?? null, chatId: session.savedId,
+  };
+}
 const report = computed(() => (result.value
   ? buildReport(result.value.columns, result.value.rows, { months: prefs.months, branches: result.value.branches })
   : null));

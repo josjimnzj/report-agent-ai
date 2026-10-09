@@ -56,22 +56,30 @@ src/
   components/     ChatSidebar, ChatPanel, AssistantMessage, LiveProgress, Composer, ReportPanel,
                   KpiCard, BranchBarChart, MonthlyTrendChart, DetailTable, ShareDoughnut,
                   InsightsList, ResultGrid, SqlPanel, PromptDialog, ChatDetailsDialog,
-                  KebabMenu, ModelPicker
+                  KebabMenu, ModelPicker, ReportActionDialog
   views/          AssistantView (menú + chat + resultados)
-test/             salesReport.test.js, persist.test.js, tags.test.js, models.test.js
+test/             salesReport.test.js, persist.test.js, tags.test.js, models.test.js, reportActions.test.js
 ```
 
 ## Qué hace la maqueta
 
 - **Menú lateral.**
   - Conversaciones guardadas. El menú «⋯» de cada una permite fijarla arriba, editar el título y las etiquetas, o eliminarla.
-  - Reportes guardados. El menú «⋯» de cada uno permite abrirlo, renombrarlo o eliminarlo.
+  - Reportes guardados. El menú «⋯» de cada uno permite abrirlo, editarlo en una conversación nueva, disparar una campaña, crear un segmento, publicarlo en el menú (o quitarlo), renombrarlo o eliminarlo.
+  - Segmentos y campañas creados, con su menú «⋯»: disparar una campaña con el segmento, o eliminar o cancelar.
   - Búsqueda por título o etiqueta, y menú colapsable.
 - **Etiquetas.**
   - Hasta 6 por conversación, de texto libre.
   - Se asignan al guardar el chat o después, desde el menú «⋯» de la cabecera del chat abierto o del menú lateral.
   - No se duplican aunque cambien mayúsculas o acentos.
   - En el menú, las etiquetas en uso aparecen como filtros.
+- **Acciones sobre un reporte (simuladas: no se envía nada al CEM).**
+  - Se lanzan desde la conversación (botones bajo cada respuesta), desde el menú «Acciones» de Resultados o desde el «⋯» de un reporte guardado.
+  - **Crear segmento:** nombre, quiénes entran (cuentas con venta ganada, con oportunidad no ganada o todas), sucursales y periodo. El tamaño estimado se calcula con los datos del reporte (`segmentSize`).
+  - **Disparar campaña:** segmento (uno nuevo desde el reporte o uno existente), canal (llamada, correo, SMS o WhatsApp) y fecha de inicio. Pide confirmación antes de programarla.
+  - **Publicar en el menú:** nombre, sección del menú, quién lo ve y periodo móvil. Si el reporte no estaba guardado, se guarda al publicarlo, y en el panel lateral aparece como «Publicado en …».
+  - Todo queda en el navegador, en la clave `ada.actions` de localStorage.
+- **Editar un reporte guardado en una conversación nueva.** Desde su «⋯» o con el botón que aparece en Resultados cuando el reporte está abierto. Crea un chat sin guardar con el reporte cargado para pedir cambios y guardarlo de nuevo.
 - **Chat abierto.** Su cabecera tiene el mismo menú «⋯»: guardar (si aún no está guardado), fijar, editar título y etiquetas, nuevo chat y eliminar.
 - **Modelo y esfuerzo.**
   - Se eligen en el selector bajo la caja de texto, con el mismo catálogo que `GET /api/models` (`src/mocks/models.js`): Claude Opus, Sonnet, Fable y Haiku, y Gemini Flash y Flash-Lite.
@@ -116,3 +124,4 @@ test/             salesReport.test.js, persist.test.js, tags.test.js, models.tes
 - Traza y Log, razonamiento visible, máximo de iteraciones y valoración 👍/👎. Están en el plan pero no tienen sentido con datos en duro.
 - Interpretar resultados genéricos (`chartGuess`). Hoy el dashboard asume el resultado de ventas por mes y sucursal.
 - Usuario real de la sesión del CEM. Hoy son las iniciales en duro `JG`.
+- Segmentos, campañas y publicación reales: definir los endpoints del CEM (AD.Web) que crean listas de cuentas, programan campañas y registran opciones de menú. Hoy son simulados.

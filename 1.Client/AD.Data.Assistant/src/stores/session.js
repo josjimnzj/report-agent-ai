@@ -77,11 +77,37 @@ export const useSessionStore = defineStore('session', {
       if (this.savedId) useChatsStore().upsert(this.chat);
       else this.dirty = true;
     },
-    openReport(report) {
+    /** Datos de un reporte guardado para mostrarlo o actuar sobre él (null si es de ejemplo sin datos). */
+    savedReportData(report) {
       if (report.source !== 'sales') {
         $notify.info(`«${report.title}» es un reporte de ejemplo sin datos en esta maqueta.`);
-        return false;
+        return null;
       }
+      return {
+        id: report.id, title: report.title, months: report.months ?? 6, branches: report.branches ?? null,
+        columns: SALES_COLUMNS, rows: SALES_ROWS, queries: SALES_QUERIES, reportId: report.id,
+      };
+    },
+    /** Abre un reporte guardado en una conversación nueva para seguir ajustándolo. */
+    openReportInNewChat(report) {
+      const data = this.savedReportData(report);
+      if (!data) return false;
+      this.newChat();
+      const scope = data.branches?.length ? data.branches.join(', ') : 'todas las sucursales';
+      this.chat.title = report.title;
+      this.chat.turns.push({
+        id: newId(), kind: 'report', reportId: report.id, question: `Editar el reporte «${report.title}»`,
+        askedAt: Date.now(), answeredAt: Date.now(), status: 'ok', phases: [],
+        answer: `Cargué el reporte guardado «${report.title}» (últimos ${data.months} meses · ${scope}). Pídeme los cambios: otro periodo, otras sucursales, una comparación… y guárdalo de nuevo desde Resultados.`,
+        columns: data.columns, rows: data.rows, queries: data.queries, view: { branches: data.branches },
+        elapsedMs: 0, runId: null,
+      });
+      this.reportTitle = report.title;
+      this.dirty = true;
+      return true;
+    },
+    openReport(report) {
+      if (!this.savedReportData(report)) return false;
       this.reportOverride = {
         id: report.id, title: report.title, months: report.months, branches: report.branches,
         columns: SALES_COLUMNS, rows: SALES_ROWS, queries: SALES_QUERIES,

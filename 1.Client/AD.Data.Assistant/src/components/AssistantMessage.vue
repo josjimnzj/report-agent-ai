@@ -6,8 +6,13 @@
     <div class="flex gap-3">
       <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brandblue text-[13px] font-semibold text-white" aria-hidden="true">AI</span>
       <div class="flex-1 rounded-xl border border-line bg-white px-4 py-3">
-        <p class="m-0 mb-3 text-[13.5px] text-ink">{{ turn.status === 'running' ? 'Estoy analizando tu consulta…' : 'Analicé tu consulta:' }}</p>
-        <LiveProgress :phases="turn.phases" :running="turn.status === 'running'" />
+        <p v-if="turn.kind === 'report'" class="m-0 text-[13.5px] text-ink">
+          <i class="fa-solid fa-folder-open mr-1 text-brandlight" aria-hidden="true" /> Reporte guardado cargado en esta conversación.
+        </p>
+        <template v-else>
+          <p class="m-0 mb-3 text-[13.5px] text-ink">{{ turn.status === 'running' ? 'Estoy analizando tu consulta…' : 'Analicé tu consulta:' }}</p>
+          <LiveProgress :phases="turn.phases" :running="turn.status === 'running'" />
+        </template>
         <p v-if="turn.modelLabel" class="m-0 mt-3 flex items-center gap-1.5 text-[11.5px] muted">
           <i class="fa-solid fa-microchip" aria-hidden="true" />
           {{ turn.modelLabel }}{{ turn.effort ? ` · esfuerzo ${effortLabel(turn.effort).toLowerCase()}` : '' }}
@@ -28,7 +33,7 @@
         <i class="fa-solid fa-check" />
       </span>
       <span class="flex-1">
-        <span class="block text-[14px] font-semibold text-ink">Análisis completado</span>
+        <span class="block text-[14px] font-semibold text-ink">{{ turn.kind === 'report' ? 'Reporte listo para editar' : 'Análisis completado' }}</span>
         <span class="mt-1 block text-[13px] leading-relaxed text-ink-soft">{{ turn.answer }}</span>
         <span class="mt-1 flex items-center justify-between gap-2 text-[11.5px]">
           <span v-if="compact" class="font-semibold text-brandlight">Ver resultados <i class="fa-solid fa-arrow-right" aria-hidden="true" /></span>
@@ -36,6 +41,12 @@
         </span>
       </span>
     </button>
+
+    <div v-if="turn.status === 'ok'" class="-mt-1 flex flex-wrap gap-1.5 pl-1" role="group" aria-label="Acciones con este resultado">
+      <button v-for="a in QUICK_ACTIONS" :key="a.id" type="button" class="quick-action" @click="$emit('action', a.id)">
+        <i :class="a.icon" aria-hidden="true" /> {{ a.text }}
+      </button>
+    </div>
 
     <div v-else-if="turn.status !== 'running'" class="flex gap-3 rounded-xl border border-line bg-white px-4 py-3" role="status">
       <i class="fa-solid mt-0.5" :class="turn.status === 'stopped' ? 'fa-circle-pause text-ink-soft' : 'fa-triangle-exclamation text-bad'" aria-hidden="true" />
@@ -54,7 +65,13 @@ defineProps({
   selectable: Boolean,
   compact: Boolean,
 });
-defineEmits(['select']);
+defineEmits(['select', 'action']);
+
+const QUICK_ACTIONS = [
+  { id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn' },
+  { id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' },
+  { id: 'publish', text: 'Publicar', icon: 'fa-solid fa-share-from-square' },
+];
 
 const time = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '');
 </script>

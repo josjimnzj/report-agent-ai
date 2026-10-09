@@ -58,6 +58,7 @@
             :selectable="compact || session.turnsWithData.length > 1"
             :compact="compact"
             @select="selectTurn(t)"
+            @action="(mode) => $emit('report-action', mode, turnContext(t))"
           />
         </template>
 
@@ -80,7 +81,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { usePrefsStore } from '@/stores/prefs';
-import { EMPTY_STATE_SUGGESTIONS, SUGGESTIONS } from '@/mocks/salesByBranch';
+import { DEFAULT_REPORT_TITLE, EMPTY_STATE_SUGGESTIONS, SUGGESTIONS } from '@/mocks/salesByBranch';
 import { CURRENT_USER } from '@/mocks/seeds';
 import AssistantMessage from './AssistantMessage.vue';
 import Composer from './Composer.vue';
@@ -90,7 +91,7 @@ import { useChatsStore } from '@/stores/chats';
 import { confirm } from 'devextreme/ui/dialog';
 
 defineProps({ compact: Boolean });
-const emit = defineEmits(['new-chat', 'save', 'edit', 'show-results']);
+const emit = defineEmits(['new-chat', 'save', 'edit', 'show-results', 'report-action']);
 
 const session = useSessionStore();
 const prefs = usePrefsStore();
@@ -124,6 +125,13 @@ const time = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-d
 
 function send(q) {
   session.ask(q);
+}
+/** Contexto de los diálogos de acción a partir de una respuesta del chat. */
+function turnContext(t) {
+  return {
+    title: session.reportTitle ?? DEFAULT_REPORT_TITLE, months: prefs.months,
+    branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows, reportId: t.reportId ?? null, chatId: session.savedId,
+  };
 }
 function selectTurn(t) {
   session.selectedTurnId = t.id;

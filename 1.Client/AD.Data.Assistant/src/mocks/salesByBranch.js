@@ -102,6 +102,8 @@ GROUP BY FORMAT(C.ResolvedOn, 'yyyy-MM'), L.LocationName
 ORDER BY Mes, Sucursal`,
 ];
 
+export const DEFAULT_REPORT_TITLE = 'Análisis de ventas por sucursal';
+
 export const SALES_QUESTION = 'Muéstrame el análisis de ventas por sucursal de los últimos 6 meses.';
 
 // Fases que muestra el progreso en vivo. `ms` es la duración simulada.

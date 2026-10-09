@@ -12,14 +12,23 @@ export const useReportsStore = defineStore('reports', {
     sorted: (s) => [...s.reports].sort((a, b) => b.createdAt - a.createdAt),
   },
   actions: {
-    add({ title, kind = 'analisis', source = 'sales', months, branches, chatId }) {
-      const report = { id: newId(), title, kind, source, months, branches, chatId, createdAt: Date.now() };
+    add({ title, kind = 'analisis', source = 'sales', months, branches, chatId, published = null }) {
+      const report = { id: newId(), title, kind, source, months, branches, chatId, published, createdAt: Date.now() };
       this.reports.push(report);
       return report;
     },
     rename(id, title) {
       const r = this.reports.find((x) => x.id === id);
       if (r && title.trim()) r.title = title.trim();
+    },
+    /** Publica el reporte como opción del menú del CEM (simulado). */
+    publish(id, { label, section, audience, rolling }) {
+      const r = this.reports.find((x) => x.id === id);
+      if (r) r.published = { label, section, audience, rolling, at: Date.now() };
+    },
+    unpublish(id) {
+      const r = this.reports.find((x) => x.id === id);
+      if (r) r.published = null;
     },
     remove(id) {
       this.reports = this.reports.filter((r) => r.id !== id);
