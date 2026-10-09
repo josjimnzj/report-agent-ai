@@ -1,9 +1,10 @@
 // Acceso HTTP al backend AD.Data.Assistant.Api. La clave va en el bundle (solo detrás de la sesión del CEM).
 // Sin valor: la API está en el mismo servidor que el front y las llamadas van a /api.
 // También acepta una URL completa, una ruta (/agent, proxy de Vite) o solo el host.
-const rawUrl = String(import.meta.env.VITE_DATA_API_URL ?? '').trim().replace(/\/+$/, '');
+// Las rutas ya empiezan por /api: un valor terminado en /api (p. ej. "/api") se recorta para no llamar a /api/api.
+const rawUrl = String(import.meta.env.VITE_DATA_API_URL ?? '').trim().replace(/\/+$/, '').replace(/\/api$/, '');
 export const API_URL = !rawUrl || /^(https?:)?\/\//.test(rawUrl) || rawUrl.startsWith('/') ? rawUrl : `https://${rawUrl}`;
-const API_KEY = import.meta.env.VITE_DATA_API_KEY || '';
+const API_KEY = String(import.meta.env.VITE_DATA_API_KEY ?? '').trim();
 
 export const authHeaders = () => (API_KEY ? { 'X-Api-Key': API_KEY } : {});
 
