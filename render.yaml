@@ -1,0 +1,11 @@
+# Blueprint de Render (plan gratuito). Maqueta de AD.Data.Assistant con datos en duro: no necesita variables.
+services:
+  - type: web
+    name: ad-data-assistant
+    runtime: docker
+    plan: free
+    rootDir: 1.Client/AD.Data.Assistant
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true

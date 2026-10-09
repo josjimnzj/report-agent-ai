@@ -13,6 +13,25 @@ npm test           # node --test sobre las funciones puras
 npm run build      # dist/ → AD.Web/Views/DataAssistant/
 ```
 
+## Docker y Render
+
+La imagen compila con Node 22, ejecuta las pruebas y sirve `dist/` con nginx sin root. nginx escucha en `$PORT` (Render lo inyecta; en local es 8080), redirige a `index.html` las rutas de la SPA y responde `/healthz`.
+
+```bash
+docker build -t ad-data-assistant .
+docker run --rm -p 8080:8080 ad-data-assistant      # http://localhost:8080
+```
+
+**Render.** El blueprint `render.yaml` está en la raíz del repositorio: servicio web Docker, plan gratuito, `rootDir: 1.Client/AD.Data.Assistant` y comprobación de salud en `/healthz`. No necesita variables de entorno.
+
+Para publicarlo:
+
+1. En Render, abre **New → Blueprint**.
+2. Elige el repositorio `josjimnzj/report-agent-ai` y la rama.
+3. Pulsa **Apply**.
+
+En el plan gratuito, el servicio se duerme tras 15 minutos sin tráfico y la primera visita después tarda unos 50 s.
+
 ## Stack
 
 - Vite 6, Vue 3.5, Vue Router 4.
