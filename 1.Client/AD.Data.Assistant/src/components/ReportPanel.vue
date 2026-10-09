@@ -1,0 +1,228 @@
+<template>
+  <section class="card print-full flex h-full min-w-0 flex-col overflow-hidden" aria-label="Resultados">
+    <div v-if="!report" class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+      <i class="fa-solid fa-chart-pie text-[40px] text-[#c9d6e2]" aria-hidden="true" />
+      <p class="m-0 text-[15px] font-semibold text-ink">Aquí verás los resultados</p>
+      <p class="m-0 max-w-sm text-[13px] muted">Haz una pregunta en el chat o abre un reporte guardado para ver indicadores, gráficas, la tabla y el SQL.</p>
+    </div>
+
+    <template v-else>
+      <header class="flex flex-wrap items-start gap-4 px-6 pb-2 pt-5">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <h2 v-if="!editingTitle" class="m-0 truncate text-[22px] font-semibold text-brandblue">{{ title }}</h2>
+            <input
+              v-else
+              ref="titleInput"
+              v-model="draftTitle"
+              class="w-full max-w-xl rounded-lg border border-brandlight px-2 py-1 text-[20px] font-semibold text-brandblue outline-none"
+              aria-label="Título del reporte"
+              maxlength="120"
+              @keydown.enter="commitTitle"
+              @keydown.esc="editingTitle = false"
+              @blur="commitTitle"
+            >
+            <button v-if="!editingTitle" type="button" class="icon-btn no-print" title="Editar título" @click="startEditTitle">
+              <i class="fa-solid fa-pen text-[13px]" aria-hidden="true" />
+            </button>
+          </div>
+          <p class="m-0 mt-1 text-[13.5px] text-ink-soft">{{ description }}</p>
+        </div>
+        <div class="no-print w-[210px]">
+          <DxSelectBox
+            v-model:value="prefs.months"
+            :items="PERIODS"
+            value-expr="value"
+            display-expr="text"
+            :input-attr="{ 'aria-label': 'Periodo' }"
+          />
+        </div>
+      </header>
+
+      <div class="no-print flex flex-wrap items-end gap-2 border-b border-line px-6">
+        <div class="flex flex-1 gap-1" role="tablist" aria-label="Vistas del resultado">
+          <button
+            v-for="t in TABS"
+            :id="`tab-${t.id}`"
+            :key="t.id"
+            type="button"
+            role="tab"
+            :aria-selected="tab === t.id"
+            :aria-controls="`panel-${t.id}`"
+            class="-mb-px flex cursor-pointer items-center gap-2 border-0 border-b-[3px] bg-transparent px-3 py-2.5 text-[14px]"
+            :class="tab === t.id ? 'border-brandlight font-semibold text-brandblue' : 'border-transparent text-ink-soft hover:text-brandblue'"
+            @click="tab = t.id"
+          >
+            <i class="fa-solid" :class="t.icon" aria-hidden="true" /> {{ t.label }}
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-2 pb-2">
+          <button type="button" class="btn" @click="savingReport = true"><i class="fa-regular fa-bookmark" aria-hidden="true" /> Guardar reporte</button>
+          <button type="button" class="btn" @click="exportPdf"><i class="fa-regular fa-file-pdf" aria-hidden="true" /> Exportar PDF</button>
+          <button type="button" class="btn" @click="downloadMarkdown"><i class="fa-brands fa-markdown" aria-hidden="true" /> Generar Markdown</button>
+          <button type="button" class="btn btn-primary" @click="share"><i class="fa-solid fa-share-nodes" aria-hidden="true" /> Compartir</button>
+        </div>
+      </div>
+
+      <div ref="body" class="scroll-thin print-full flex-1 overflow-y-auto bg-[#f8fbfd] p-5">
+        <div v-if="tab === 'results'" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
+          <div class="grid gap-4" :class="wide ? 'grid-cols-4' : 'grid-cols-2'">
+            <KpiCard v-for="k in report.kpis" :key="k.id" :kpi="k" />
+          </div>
+          <div class="grid gap-4" :class="wide ? 'grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]' : 'grid-cols-1'">
+            <article class="card min-w-0 p-4">
+              <h3 class="section-title mb-2">Ventas por sucursal</h3>
+              <BranchBarChart :report="report" />
+            </article>
+            <article class="card min-w-0 p-4">
+              <h3 class="section-title mb-2">Evolución mensual de ventas</h3>
+              <MonthlyTrendChart :report="report" />
+            </article>
+          </div>
+          <div class="grid gap-4" :class="wider ? 'grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]' : 'grid-cols-1'">
+            <article class="card min-w-0 p-4">
+              <h3 class="section-title mb-3">Detalle de ventas por sucursal</h3>
+              <DetailTable :report="report" />
+            </article>
+            <article class="card min-w-0 p-4">
+              <h3 class="section-title mb-3">Participación de ventas por sucursal</h3>
+              <ShareDoughnut :report="report" />
+            </article>
+          </div>
+          <article class="card p-5">
+            <h3 class="section-title mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-lightbulb text-brandlight" aria-hidden="true" /> Insights clave
+            </h3>
+            <InsightsList :insights="insights" :columns="wider ? 4 : 2" />
+          </article>
+        </div>
+
+        <div v-else-if="tab === 'table'" id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="card p-4">
+          <ResultGrid :columns="result.columns" :rows="result.rows" :total-rows="result.totalRows" :truncated="result.truncated" />
+        </div>
+
+        <div v-else-if="tab === 'sql'" id="panel-sql" role="tabpanel" aria-labelledby="tab-sql">
+          <SqlPanel :queries="result.queries" />
+        </div>
+
+        <div v-else id="panel-insights" role="tabpanel" aria-labelledby="tab-insights">
+          <InsightsList :insights="insights" :columns="wide ? 2 : 1" cards />
+        </div>
+      </div>
+    </template>
+
+    <PromptDialog
+      :visible="savingReport"
+      title="Guardar reporte"
+      label="Nombre del reporte"
+      :value="title"
+      hint="Se guarda en este navegador con el periodo y las sucursales actuales."
+      @confirm="saveReport"
+      @cancel="savingReport = false"
+    />
+  </section>
+</template>
+
+<script setup>
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { DxSelectBox } from 'devextreme-vue/select-box';
+import { saveAs } from 'file-saver';
+import { useSessionStore } from '@/stores/session';
+import { usePrefsStore } from '@/stores/prefs';
+import { useReportsStore } from '@/stores/reports';
+import { $notify } from '@/shared/notify';
+import { PERIODS, buildInsights, buildMarkdown, buildReport } from '@/shared/salesReport';
+import KpiCard from './KpiCard.vue';
+import BranchBarChart from './BranchBarChart.vue';
+import MonthlyTrendChart from './MonthlyTrendChart.vue';
+import DetailTable from './DetailTable.vue';
+import ShareDoughnut from './ShareDoughnut.vue';
+import InsightsList from './InsightsList.vue';
+import ResultGrid from './ResultGrid.vue';
+import SqlPanel from './SqlPanel.vue';
+import PromptDialog from './PromptDialog.vue';
+
+const TABS = [
+  { id: 'results', label: 'Resultados', icon: 'fa-chart-column' },
+  { id: 'table', label: 'Tabla', icon: 'fa-table' },
+  { id: 'sql', label: 'SQL', icon: 'fa-code' },
+  { id: 'insights', label: 'Insights', icon: 'fa-lightbulb' },
+];
+const DEFAULT_TITLE = 'Análisis de ventas por sucursal';
+
+const session = useSessionStore();
+const prefs = usePrefsStore();
+const reports = useReportsStore();
+
+const tab = ref('results');
+const editingTitle = ref(false);
+const draftTitle = ref('');
+const titleInput = ref(null);
+const savingReport = ref(false);
+
+// Distribución según el ancho real del panel (cambia al plegar el menú o ampliar el chat).
+const body = ref(null);
+const width = ref(1200);
+const wide = computed(() => width.value >= 820);
+const wider = computed(() => width.value >= 1080);
+const observer = new ResizeObserver(([entry]) => { width.value = entry.contentRect.width; });
+watch(body, (el, old) => { if (old) observer.unobserve(old); if (el) observer.observe(el); });
+onBeforeUnmount(() => observer.disconnect());
+
+const result = computed(() => session.result);
+const report = computed(() => (result.value
+  ? buildReport(result.value.columns, result.value.rows, { months: prefs.months, branches: result.value.branches })
+  : null));
+const insights = computed(() => (report.value ? buildInsights(report.value) : []));
+
+const title = computed(() => session.reportTitle ?? result.value?.title ?? DEFAULT_TITLE);
+const description = computed(() => {
+  const r = report.value;
+  const scope = r.branches.length < r.allBranches.length ? `de ${r.branches.join(', ')}` : 'por sucursal';
+  return `Resumen de ventas, tendencias y desempeño ${scope} de los últimos ${r.range.months} meses (${r.range.from}–${r.range.to}).`;
+});
+
+watch(() => result.value?.id, () => { tab.value = 'results'; editingTitle.value = false; });
+
+function startEditTitle() {
+  draftTitle.value = title.value;
+  editingTitle.value = true;
+  nextTick(() => titleInput.value?.select());
+}
+function commitTitle() {
+  if (!editingTitle.value) return;
+  if (draftTitle.value.trim()) session.reportTitle = draftTitle.value.trim();
+  editingTitle.value = false;
+}
+
+function saveReport(name) {
+  reports.add({
+    title: name, kind: 'analisis', source: 'sales', months: prefs.months,
+    branches: result.value.branches, chatId: session.savedId,
+  });
+  savingReport.value = false;
+  $notify.success(`Reporte «${name}» guardado.`);
+}
+
+function markdown() {
+  return buildMarkdown(report.value, { title: title.value, description: description.value, insights: insights.value, queries: result.value.queries });
+}
+const slug = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+function downloadMarkdown() {
+  saveAs(new Blob([markdown()], { type: 'text/markdown;charset=utf-8' }), `${slug(title.value) || 'reporte'}.md`);
+}
+function exportPdf() {
+  // El diálogo de impresión del navegador permite «Guardar como PDF»; los estilos @media print ocultan menú y chat.
+  tab.value = 'results';
+  nextTick(() => window.print());
+}
+async function share() {
+  try {
+    await navigator.clipboard.writeText(markdown());
+    $notify.success('Resumen del reporte copiado al portapapeles (Markdown).');
+  } catch {
+    $notify.error('No se pudo copiar: el navegador bloqueó el portapapeles.');
+  }
+}
+</script>

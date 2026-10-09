@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #app { height: 100%; margin: 0; }
+body {
+  background: theme('colors.canvas');
+  color: theme('colors.ink.DEFAULT');
+  font-family: theme('fontFamily.sans');
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+*, *::before, *::after { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+
+@layer components {
+  .card { @apply bg-white rounded-2xl border border-line shadow-card; }
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-1.5 text-[13px]
+      text-ink cursor-pointer transition-colors hover:border-brandlight hover:text-brandblue
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-brandlight disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply border-brandblue bg-brandblue text-white hover:bg-[#0a5b7d] hover:text-white hover:border-[#0a5b7d]; }
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 bg-transparent text-ink-soft cursor-pointer
+      hover:bg-canvas hover:text-brandblue focus-visible:outline focus-visible:outline-2 focus-visible:outline-brandlight;
+  }
+  .muted { @apply text-ink-muted; }
+  .num { font-variant-numeric: tabular-nums; }
+}
+
+.scroll-thin { scrollbar-width: thin; scrollbar-color: #c9d6e2 transparent; }
+
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .print-full { position: static !important; height: auto !important; overflow: visible !important; width: 100% !important; }
+  .card { box-shadow: none; break-inside: avoid; }
+}
+
+.dx-viewport h1, .dx-viewport h2, .dx-viewport h3 { letter-spacing: normal; }
+.dx-viewport .section-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; color: theme('colors.ink.DEFAULT'); }
