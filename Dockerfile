@@ -15,14 +15,13 @@ ARG VITE_DATA_API_KEY=
 ENV VITE_APP_BASE=/ VITE_DATA_MODE=$VITE_DATA_MODE VITE_DATA_API_URL=$VITE_DATA_API_URL VITE_DATA_API_KEY=$VITE_DATA_API_KEY
 RUN npm test && npm run build
 
-# 2) MCP: se compila desde su repositorio en un commit fijo.
-FROM node:22-bookworm AS mcp
-ARG MCP_REPO=https://github.com/josjimnzj/addaccion-mcp-sql.git
-ARG MCP_COMMIT=d0eb8b36081ba18f48b87ec84d6e5aba320f63c6
+# 2) MCP: copia de addaccion-mcp-sql incluida en 3.Mcp/ (el repositorio original es privado).
+FROM node:22-bookworm-slim AS mcp
 WORKDIR /opt/addaccion-mcp-sql
-RUN git init -q . && git remote add origin "$MCP_REPO" \
- && git fetch -q --depth 1 origin "$MCP_COMMIT" && git checkout -q FETCH_HEAD \
- && npm ci --no-audit --no-fund && npm run build && npm prune --omit=dev && rm -rf .git src test
+COPY 3.Mcp/addaccion-mcp-sql/package.json 3.Mcp/addaccion-mcp-sql/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY 3.Mcp/addaccion-mcp-sql/ ./
+RUN npm run build && npm prune --omit=dev && rm -rf src test
 
 # 3) API
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS api

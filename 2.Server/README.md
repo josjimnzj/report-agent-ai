@@ -83,6 +83,6 @@ El `Dockerfile` de la raíz construye una sola imagen:
 
 - El front compilado en `wwwroot`.
 - La API publicada.
-- addaccion-mcp-sql, compilado desde GitHub en un commit fijo (`MCP_COMMIT`; para actualizar el MCP, cambia ese valor).
+- addaccion-mcp-sql, compilado desde la copia en `3.Mcp/addaccion-mcp-sql` (el repositorio original es privado; para actualizarlo, copia de nuevo su contenido).
 
 Corre sobre `aspnet:10.0`, sin root. La API sirve la SPA en cualquier ruta que no sea `/api` ni `/health`. CORS sigue disponible para clientes en otro dominio.
