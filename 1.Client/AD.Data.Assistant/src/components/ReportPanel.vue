@@ -94,22 +94,32 @@
             <i class="fa-solid fa-comment-dots mt-0.5 text-brandlight" aria-hidden="true" />
             <p class="m-0 text-[14px] leading-relaxed text-ink">{{ result.answer }}</p>
           </article>
-          <article v-if="chart" class="card min-w-0 p-4">
+          <!-- Sin gráfica pedida: primero los datos en crudo y la propuesta de llevarlos a gráfica. -->
+          <template v-if="display.table">
+            <article v-if="display.suggestion" class="no-print card flex flex-wrap items-center gap-3 border-brandlight bg-[#f2f9fd] p-4">
+              <i class="fa-solid fa-chart-column text-[18px] text-brandlight" aria-hidden="true" />
+              <p class="m-0 min-w-[200px] flex-1 text-[13.5px] text-ink">
+                ¿Lo llevamos a una gráfica? Sugerencia: <b>{{ chartTypeLabel(display.suggestion.type) }}</b>{{ suggestionTitle ? ` · ${suggestionTitle}` : '' }}.
+              </p>
+              <button type="button" class="btn btn-primary" @click="session.setChartChoice({ type: display.suggestion.type })">
+                <i class="fa-solid fa-chart-column" aria-hidden="true" /> Ver en {{ chartTypeLabel(display.suggestion.type).toLowerCase() }}
+              </button>
+              <ChartPicker :spec="display.suggestion" :value="TABLE_TYPE" allow-table type-only :compact="narrow" @change="(c) => c.type && c.type !== TABLE_TYPE && session.setChartChoice(c)" />
+            </article>
+            <article class="card min-w-0 p-4">
+              <h3 class="section-title mb-3">Datos</h3>
+              <ResultGrid :columns="result.columns" :rows="result.rows" :total-rows="result.totalRows" :truncated="result.truncated" />
+            </article>
+          </template>
+          <article v-else class="card min-w-0 p-4">
             <div class="mb-3 flex flex-wrap items-start gap-2">
               <h3 class="section-title m-0 flex-1 pt-1.5">{{ chartTitle }}</h3>
-              <ChartPicker class="no-print" :spec="chart" :compact="narrow" @change="(c) => session.setChartChoice(c)" />
+              <ChartPicker class="no-print" :spec="chart" :compact="narrow" allow-table @change="(c) => session.setChartChoice(c)" />
             </div>
             <p v-if="result.askChart && !result.chartType" class="no-print m-0 mb-2 text-[12.5px] text-ink-soft">
               <i class="fa-solid fa-circle-question mr-1 text-brandlight" aria-hidden="true" /> El asistente propuso esta gráfica; elige otro tipo si lo prefieres.
             </p>
             <GenericChart :spec="chart" :columns="result.columns" :rows="result.rows" />
-          </article>
-          <article v-else class="card flex gap-3 p-4">
-            <i class="fa-solid fa-table mt-0.5 text-ink-soft" aria-hidden="true" />
-            <p class="m-0 text-[13.5px] text-ink-soft">
-              Este resultado no tiene medidas numéricas para graficar. El detalle está en la pestaña
-              <button type="button" class="cursor-pointer border-0 bg-transparent p-0 font-semibold text-brandlight underline" @click="tab = 'table'">Tabla</button>.
-            </p>
           </article>
         </div>
         <div v-else-if="tab === 'results'" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
@@ -173,9 +183,9 @@
       :visible="savingReport"
       :title="title"
       :result="result"
-      :charted="!sales"
+      :charted="!sales && Boolean(display.suggestion)"
       :chart-hint="result?.chart ?? null"
-      :choice="chartChoice"
+      :choice="saveChoice"
       :hint="IS_API ? 'Se guarda en el servidor con el resultado actual.' : 'Se guarda en este navegador con el periodo y las sucursales actuales.'"
       @confirm="saveReport"
       @cancel="savingReport = false"
@@ -208,7 +218,7 @@ import TracePanel from './TracePanel.vue';
 import LogPanel from './LogPanel.vue';
 import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
 import { IS_API } from '@/services/mode';
-import { chartSpec, genericMarkdown, isSalesResult } from '@/shared/resultView';
+import { TABLE_TYPE, chartTypeLabel, genericMarkdown, isSalesResult, resultDisplay } from '@/shared/resultView';
 import { fmtInt } from '@/shared/salesReport';
 
 const TABS = [
@@ -269,19 +279,19 @@ const sales = computed(() => Boolean(result.value) && isSalesResult(result.value
 // Traza y Log son de una respuesta del chat (no de un reporte guardado abierto).
 const turn = computed(() => (result.value?.turnId ? session.chat.turns.find((t) => t.id === result.value.turnId) ?? null : null));
 const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value) && ((t.id !== 'trace' && t.id !== 'log') || turn.value)));
-/** Elección del usuario sobre la gráfica (tipo y líneas de referencia); chartAvg es de reportes anteriores. */
-const chartChoice = computed(() => (result.value ? {
-  type: result.value.chartType ?? undefined,
-  lines: result.value.chartLines ?? undefined,
-  avg: result.value.chartAvg ?? undefined,
-} : {}));
-const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart, chartChoice.value) : null));
-const chartTitle = computed(() => {
-  const c = chart.value;
-  if (!c) return '';
-  if (c.transpose) return 'Indicadores';
-  return c.x === '#' ? c.y.join(', ') : `${c.y.join(', ')} por ${c.x}`;
+/** Tabla primero (sin gráfica pedida o «Solo tabla») o gráfica; con la sugerencia del agente para llevarla a gráfica. */
+const display = computed(() => (result.value && !sales.value ? resultDisplay(result.value) : { table: false, suggestion: null, chart: null }));
+const chart = computed(() => display.value.chart);
+// Al guardar se define la gráfica: si se está viendo la tabla, se parte de la sugerida (se puede elegir «Solo tabla»).
+const saveChoice = computed(() => {
+  const r = result.value;
+  if (!r) return {};
+  if (display.value.table) return { type: display.value.suggestion?.type ?? TABLE_TYPE };
+  return { type: r.chartType ?? undefined, lines: r.chartLines ?? undefined, avg: r.chartAvg ?? undefined };
 });
+const specTitle = (c) => (!c ? '' : c.transpose ? 'Indicadores' : c.x === '#' ? c.y.join(', ') : `${c.y.join(', ')} por ${c.x}`);
+const suggestionTitle = computed(() => specTitle(display.value.suggestion));
+const chartTitle = computed(() => specTitle(chart.value));
 const report = computed(() => (sales.value
   ? buildReport(result.value.columns, result.value.rows, { months: prefs.months, branches: result.value.branches })
   : null));

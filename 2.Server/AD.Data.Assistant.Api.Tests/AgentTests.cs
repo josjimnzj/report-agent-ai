@@ -36,13 +36,18 @@ public class AgentTests
     [Fact]
     public void ParseAnswer_lee_respuesta_consulta_principal_y_grafica()
     {
-        var (answer, index, chart, askChart, openReport) = DataAgent.ParseAnswer("""{"answer":"Centro lidera.","resultQuery":2,"chart":{"type":"bar","x":"Sucursal","y":["Monto"]},"askChart":false,"openReport":true}""");
+        var (answer, index, chart, askChart, openReport, showChart) = DataAgent.ParseAnswer("""{"answer":"Centro lidera.","resultQuery":2,"chart":{"type":"bar","x":"Sucursal","y":["Monto"]},"askChart":false,"openReport":true}""");
         Assert.Equal("Centro lidera.", answer);
         Assert.Equal(2, index);
         Assert.Equal(new ChartHint("bar", "Sucursal", ["Monto"]).Type, chart!.Type);
         Assert.Equal(["Monto"], chart.Y);
         Assert.False(askChart);
         Assert.True(openReport);
+        Assert.True(showChart); // sin el campo se muestra la gráfica, como antes
+
+        var tableFirst = DataAgent.ParseAnswer("""{"answer":"Aquí están los datos. ¿Lo llevamos a barras?","resultQuery":1,"chart":{"type":"bar","x":"A","y":["B"],"series":[],"refLines":[]},"showChart":false,"askChart":false,"openReport":false}""");
+        Assert.False(tableFirst.ShowChart);
+        Assert.Equal("bar", tableFirst.Chart!.Type); // la sugerencia se conserva
 
         var combo = DataAgent.ParseAnswer("""{"answer":"x","resultQuery":1,"chart":{"type":"bar","x":"Mes","y":["Ventas","Monto"],"series":[{"column":"Monto","type":"line","axis":"right"}],"refLines":[{"kind":"average","column":"Ventas","value":null,"label":"Promedio"},{"kind":"value","column":"Ventas","value":500,"label":"Meta"}]},"askChart":false,"openReport":false}""");
         Assert.Equal("line", combo.Chart!.Series![0].Type);

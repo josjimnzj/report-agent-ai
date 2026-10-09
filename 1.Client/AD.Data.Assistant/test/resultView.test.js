@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SALES_COLUMNS } from '../src/mocks/salesByBranch.js';
-import { CHART_TYPES, chartData, chartSpec, chartTypeLabel, columnKinds, MAX_BAR, MAX_PIE, formatValue, genericMarkdown, isMoneyColumn, isSalesResult } from '../src/shared/resultView.js';
+import { CHART_TYPES, chartData, chartSpec, chartTypeLabel, resultDisplay, columnKinds, MAX_BAR, MAX_PIE, formatValue, genericMarkdown, isMoneyColumn, isSalesResult } from '../src/shared/resultView.js';
 
 const cols = ['Mes', 'Ventas', 'Monto'];
 const rows = [['2026-01', 10, 1500.5], ['2026-02', 12, 1800], ['2026-03', 9, null]];
@@ -86,6 +86,24 @@ test('mezcla de series, segundo eje y líneas de referencia', () => {
   assert.deepEqual(mm.refLines.map((l) => l.value), [3000, 1000]);
   assert.equal(chartTypeLabel('combo'), 'Barras + línea');
   assert.ok(CHART_TYPES.every((t) => t.label && t.help && t.ask));
+});
+
+test('sin gráfica pedida se ven primero los datos en tabla, con la sugerencia lista', () => {
+  const r = { columns: cols, rows, chart: { type: 'bar', x: 'Mes', y: ['Ventas'] } };
+  const first = resultDisplay({ ...r, showChart: false });
+  assert.equal(first.table, true);
+  assert.equal(first.chart, null);
+  assert.equal(first.suggestion.type, 'bar');
+  // El usuario la lleva a gráfica (o elige otro tipo).
+  assert.equal(resultDisplay({ ...r, showChart: false, chartType: 'bar' }).chart.type, 'bar');
+  assert.equal(resultDisplay({ ...r, showChart: false, chartType: 'line' }).chart.type, 'line');
+  // Pedida en el chat: gráfica directa; «Solo tabla» la quita.
+  assert.equal(resultDisplay({ ...r, showChart: true }).table, false);
+  assert.equal(resultDisplay(r).table, false); // turnos y reportes anteriores
+  assert.equal(resultDisplay({ ...r, showChart: true, chartType: 'table' }).table, true);
+  // Sin medidas no hay gráfica posible: tabla.
+  assert.equal(resultDisplay({ columns: ['A'], rows: [['x']], chart: null }).table, true);
+  assert.equal(chartTypeLabel('table'), 'Solo tabla (sin gráfica)');
 });
 
 test('chartData agrupa el pastel en «Otros» y recorta las barras', () => {

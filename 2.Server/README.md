@@ -88,7 +88,12 @@ El agente marca sus ejecuciones con `mode = "query"`; si la base se comparte con
 
 ## Gráficas y reporte
 
-El reporte siempre muestra una gráfica (la tabla va en la pestaña «Tabla»). La respuesta final del agente incluye `chart`, `askChart` (no tenía claro el tipo de gráfica: propone una y pregunta) y `openReport` (el usuario pidió verlo en el reporte: el front abre Resultados).
+La respuesta final del agente incluye `chart`, `showChart`, `askChart` y `openReport`:
+
+- **Sin gráfica pedida** (`showChart: false`): Resultados muestra primero los **datos en crudo** en tabla y el agente pregunta si se lleva a una gráfica; `chart` es su sugerencia. Un clic en «Ver en …», en los atajos bajo la respuesta o en el selector la dibuja sin volver a consultar.
+- **Gráfica pedida** (`showChart: true`): la dibuja directamente solo si está 100 % seguro del tipo; si no, la propone y pregunta (`askChart: true`).
+- `openReport`: el usuario pidió verlo en el reporte; el front abre Resultados.
+- El selector de tipo incluye «Solo tabla (sin gráfica)» para volver a los datos.
 
 `chart` (DevExtreme dxChart / dxPieChart):
 
@@ -99,7 +104,7 @@ El reporte siempre muestra una gráfica (la tabla va en la pestaña «Tabla»). 
 | `series` | Mezcla por columna: `{ column, type: bar\|line\|spline\|area\|scatter, axis: left\|right }` (p. ej. barras de ventas y monto como línea en el eje derecho) |
 | `refLines` | Líneas de referencia: `{ kind: average\|max\|min\|value, column, value, label }` (promedio, máximo y mínimo se calculan en el front con todas las filas; `value` para metas) |
 
-Las líneas de referencia son **opcionales**: el agente solo las agrega si se piden y por defecto no hay ninguna. En Resultados el usuario cambia el tipo (lista agrupada), elige líneas de referencia (promedio, máximo, mínimo y una meta en un valor fijo, todas opcionales) y abre la ayuda «¿Qué gráficas hay?» con todos los tipos, extras y ejemplos para pedírselos al asistente. Al **guardar un reporte** se elige la gráfica con vista previa; queda en el reporte (`chartType`, `chartLines`; `[]` = sin líneas) y se usa al reabrirlo.
+Las líneas de referencia son **opcionales**: el agente solo las agrega si se piden y por defecto no hay ninguna. En Resultados el usuario cambia el tipo (lista agrupada), elige líneas de referencia (promedio, máximo, mínimo y una meta en un valor fijo, todas opcionales) y abre la ayuda «¿Qué gráficas hay?» con todos los tipos, extras y ejemplos para pedírselos al asistente. Al **guardar un reporte** se elige la gráfica con vista previa (si se estaba viendo la tabla, parte de la sugerida; también se puede guardar «Solo tabla»); queda en el reporte (`chartType`, `chartLines`; `[]` = sin líneas) y se usa al reabrirlo.
 
 ## Desarrollo
 

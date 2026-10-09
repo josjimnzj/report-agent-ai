@@ -70,10 +70,11 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
           "required": ["type", "x", "y", "series", "refLines"],
           "additionalProperties": false
         },
+        "showChart": { "type": "boolean" },
         "askChart": { "type": "boolean" },
         "openReport": { "type": "boolean" }
       },
-      "required": ["answer", "resultQuery", "chart", "askChart", "openReport"],
+      "required": ["answer", "resultQuery", "chart", "showChart", "askChart", "openReport"],
       "additionalProperties": false
     }
     """).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
@@ -143,7 +144,7 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         new(conversationId, status, run.Iterations, answer,
             main?.Columns ?? [], main?.Rows ?? [], results.Select(r => r.Sql).ToList(), run.Trace, run.Usage, ms,
             runId, settings.Model, settings.Effort, run.ServedBy, chart, main?.RowCount ?? 0,
-            AskChart: parts?.AskChart ?? false, OpenReport: parts?.OpenReport ?? false);
+            AskChart: parts?.AskChart ?? false, OpenReport: parts?.OpenReport ?? false, ShowChart: parts?.ShowChart ?? true);
 
     private static readonly string? Commit = (Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? Environment.GetEnvironmentVariable("GIT_COMMIT")) is { Length: >= 7 } c ? c[..7] : null;
 
@@ -210,7 +211,7 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
     {
         var t = text.Trim();
         var i = t.IndexOf('{'); var j = t.LastIndexOf('}');
-        if (i < 0 || j <= i) return new(t, 0, null, false, false);
+        if (i < 0 || j <= i) return new(t, 0, null, false, false, true);
         try
         {
             using var doc = JsonDocument.Parse(t[i..(j + 1)]);
@@ -238,9 +239,11 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
             }
             bool Flag(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
             static string Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
-            return new(answer, index, chart, Flag("askChart"), Flag("openReport"));
+            // Sin el campo (respuesta antigua o modelo que no lo respetó) se muestra la gráfica, como antes.
+            var showChart = !root.TryGetProperty("showChart", out var sc) || sc.ValueKind != JsonValueKind.False;
+            return new(answer, index, chart, Flag("askChart"), Flag("openReport"), showChart);
         }
-        catch (JsonException) { return new(t, 0, null, false, false); }
+        catch (JsonException) { return new(t, 0, null, false, false, true); }
     }
 
     private async Task<ConversationDoc> LoadConversationAsync(string id, CancellationToken ct)

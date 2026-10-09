@@ -3,9 +3,9 @@
     <div class="flex flex-wrap items-center gap-2">
       <div :class="compact ? 'w-full' : 'w-[230px]'">
         <DxSelectBox
-          :items="GROUPED"
+          :items="groups"
           :grouped="true"
-          :value="spec.type"
+          :value="value ?? spec.type"
           value-expr="id"
           display-expr="label"
           item-template="item"
@@ -20,7 +20,7 @@
           </template>
         </DxSelectBox>
       </div>
-      <template v-if="!polar">
+      <template v-if="!polar && !typeOnly">
         <div :class="compact ? 'w-full' : 'w-[230px]'">
           <DxTagBox
             :items="REF_LINE_KINDS"
@@ -61,7 +61,7 @@
 
     <div v-if="helpOpen" class="rounded-lg border border-line bg-white p-3 text-[12.5px]" role="region" aria-label="Ayuda de gráficas">
       <div class="grid gap-x-6 gap-y-3" :class="compact ? 'grid-cols-1' : 'grid-cols-2'">
-        <section v-for="g in GROUPED" :key="g.key">
+        <section v-for="g in groups" :key="g.key">
           <h4 class="m-0 mb-1 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">{{ g.key }}</h4>
           <ul class="m-0 flex list-none flex-col gap-1 p-0">
             <li v-for="t in g.items" :key="t.id">
@@ -97,7 +97,7 @@ import { computed, ref } from 'vue';
 import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxTagBox } from 'devextreme-vue/tag-box';
 import { DxNumberBox } from 'devextreme-vue/number-box';
-import { CHART_EXTRAS, CHART_TYPES, POLAR_TYPES, REF_LINE_KINDS } from '@/shared/resultView';
+import { CHART_EXTRAS, CHART_TYPES, POLAR_TYPES, REF_LINE_KINDS, TABLE_OPTION } from '@/shared/resultView';
 
 const props = defineProps({
   /** Gráfica actual (de chartSpec). */
@@ -105,10 +105,17 @@ const props = defineProps({
   compact: Boolean,
   /** Muestra el botón de ayuda con los tipos disponibles. */
   help: { type: Boolean, default: true },
+  /** Añade «Solo tabla (sin gráfica)». */
+  allowTable: Boolean,
+  /** Solo el tipo (sin líneas de referencia), p. ej. al proponer llevar la tabla a gráfica. */
+  typeOnly: Boolean,
+  /** Valor mostrado si no es el tipo de `spec` (p. ej. «table»). */
+  value: { type: String, default: null },
 });
 const emit = defineEmits(['change']);
 
 const GROUPED = [...new Set(CHART_TYPES.map((t) => t.group))].map((key) => ({ key, items: CHART_TYPES.filter((t) => t.group === key) }));
+const groups = computed(() => (props.allowTable ? [{ key: TABLE_OPTION.group, items: [TABLE_OPTION] }, ...GROUPED] : GROUPED));
 const EXAMPLES = ['Ventas por mes en barras con una línea de promedio', 'Barras de ventas y línea de monto en el eje derecho', 'Agrega una meta en 500', 'Participación por sucursal en dona'];
 const polar = computed(() => POLAR_TYPES.has(props.spec.type));
 const helpOpen = ref(false);

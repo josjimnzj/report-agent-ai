@@ -42,8 +42,8 @@
       </span>
     </button>
 
-    <div v-if="turn.status === 'ok' && turn.askChart" class="-mt-1 flex flex-wrap items-center gap-1.5 pl-1" role="group" aria-label="Tipo de gráfica">
-      <span class="text-[12px] text-ink-soft">¿Cómo quieres la gráfica?</span>
+    <div v-if="chartPrompt" class="-mt-1 flex flex-wrap items-center gap-1.5 pl-1" role="group" aria-label="Tipo de gráfica">
+      <span class="text-[12px] text-ink-soft">{{ chartPrompt }}</span>
       <button
         v-for="c in quickCharts"
         :key="c.id"
@@ -167,7 +167,22 @@ function sendBad() {
   } });
 }
 
-const quickCharts = QUICK_CHART_TYPES.map((id) => CHART_TYPES.find((t) => t.id === id));
+// Sin gráfica pedida se ofrece llevar la tabla a gráfica, con la sugerida del agente primero.
+const suggested = computed(() => (props.turn.showChart === false ? props.turn.view?.chart?.type : null));
+const quickCharts = computed(() => {
+  const ids = suggested.value && CHART_TYPES.some((t) => t.id === suggested.value)
+    ? [suggested.value, ...QUICK_CHART_TYPES.filter((id) => id !== suggested.value)]
+    : QUICK_CHART_TYPES;
+  return ids.map((id) => {
+    const t = CHART_TYPES.find((c) => c.id === id);
+    return id === suggested.value ? { ...t, label: `Sugerida: ${t.label}` } : t;
+  });
+});
+const chartPrompt = computed(() => {
+  if (props.turn.status !== 'ok' || !props.turn.columns?.length) return '';
+  if (props.turn.showChart === false && props.turn.view?.chart) return '¿Lo llevamos a una gráfica?';
+  return props.turn.askChart ? '¿Cómo quieres la gráfica?' : '';
+});
 
 const RATINGS = [
   { value: 1, label: 'Respuesta útil', icon: 'fa-thumbs-up', active: 'text-good' },

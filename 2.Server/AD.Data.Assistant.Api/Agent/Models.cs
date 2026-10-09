@@ -30,11 +30,13 @@ public sealed record QueryResponse(
     ChartHint? Chart,
     long TotalRows,
     bool AskChart = false,
-    bool OpenReport = false);
+    bool OpenReport = false,
+    bool ShowChart = true);
 
 /// <param name="AskChart">El agente no tuvo claro qué gráfica quiere el usuario y se lo pregunta en la respuesta.</param>
 /// <param name="OpenReport">El usuario pidió ver el resultado en el reporte.</param>
-public sealed record AnswerParts(string Answer, int ResultQuery, ChartHint? Chart, bool AskChart, bool OpenReport);
+/// <param name="ShowChart">El usuario pidió una gráfica; si no, el reporte muestra primero los datos en tabla y `Chart` es solo la sugerencia.</param>
+public sealed record AnswerParts(string Answer, int ResultQuery, ChartHint? Chart, bool AskChart, bool OpenReport, bool ShowChart = true);
 
 /// <summary>Gráfica sugerida por el agente para el resultado principal (tipos de DevExtreme dxChart / dxPieChart).</summary>
 /// <param name="Series">Tipo y eje por columna, para mezclar (barras + línea, eje derecho para otra magnitud).</param>

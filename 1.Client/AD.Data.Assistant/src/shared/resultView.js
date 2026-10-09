@@ -68,7 +68,10 @@ export const POLAR_TYPES = new Set(['pie', 'doughnut']);
 const BAR_TYPES = new Set(['bar', 'horizontalbar', 'stackedbar', 'fullstackedbar', 'combo']);
 const TYPES = new Set(CHART_TYPES.map((t) => t.id));
 const SERIES_TYPES = new Set(['bar', 'line', 'spline', 'area', 'scatter']);
-export const chartTypeLabel = (id) => CHART_TYPES.find((t) => t.id === id)?.label ?? id;
+/** «Solo tabla»: el reporte muestra los datos en crudo, sin gráfica. */
+export const TABLE_TYPE = 'table';
+export const TABLE_OPTION = { id: TABLE_TYPE, label: 'Solo tabla (sin gráfica)', icon: 'fa-table', group: 'Datos', help: 'Los datos en crudo, sin gráfica.', ask: 'Muéstrame solo la tabla' };
+export const chartTypeLabel = (id) => (id === TABLE_TYPE ? TABLE_OPTION.label : CHART_TYPES.find((t) => t.id === id)?.label ?? id);
 
 export const MAX_BAR = 50;
 export const MAX_PIE = 10;
@@ -170,6 +173,19 @@ export function chartSpec(columns, rows, hint, choice) {
   spec.refLines = lines.filter(Boolean);
   spec.hasAverage = spec.refLines.some((l) => l.kind === 'average');
   return spec;
+}
+
+/**
+ * Qué muestra Resultados para un resultado: la gráfica o, si el usuario no pidió gráfica (o eligió «Solo tabla»),
+ * los datos en crudo con la gráfica sugerida por el agente para llevarlos a gráfica con un clic.
+ * @returns {{ table: boolean, suggestion: object|null, chart: object|null }}
+ */
+export function resultDisplay(result) {
+  if (!result) return { table: false, suggestion: null, chart: null };
+  const suggestion = chartSpec(result.columns, result.rows, result.chart, {});
+  const table = !suggestion || result.chartType === TABLE_TYPE || (!result.chartType && result.showChart === false);
+  const choice = { type: result.chartType ?? undefined, lines: result.chartLines ?? undefined, avg: result.chartAvg ?? undefined };
+  return { table, suggestion, chart: table ? null : chartSpec(result.columns, result.rows, result.chart, choice) };
 }
 
 /** Filas para la gráfica: pastel/dona con «Otros» a partir de MAX_PIE categorías y barras con tope MAX_BAR. */

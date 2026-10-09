@@ -47,7 +47,7 @@ export const useSessionStore = defineStore('session', {
       const t = this.selectedTurn;
       return t ? {
         id: t.id, title: null, question: t.question, answer: t.answer, chart: t.view?.chart ?? null,
-        chartType: t.view?.chartType ?? null, chartLines: t.view?.chartLines ?? null, chartAvg: t.view?.chartAvg ?? null, askChart: Boolean(t.askChart), turnId: t.kind === 'report' ? null : t.id,
+        chartType: t.view?.chartType ?? null, chartLines: t.view?.chartLines ?? null, chartAvg: t.view?.chartAvg ?? null, askChart: Boolean(t.askChart), showChart: t.showChart !== false, turnId: t.kind === 'report' ? null : t.id,
         branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
         queries: t.queries, totalRows: t.totalRows ?? t.rows.length, truncated: Boolean(t.truncated),
       } : null;
@@ -223,6 +223,8 @@ export const useSessionStore = defineStore('session', {
           status: done.status, answer: done.answer, columns: done.columns, rows: done.rows, totalRows: done.totalRows ?? done.rows?.length,
           queries: done.queries, view: done.view, elapsedMs: done.elapsedMs, runId: done.runId, answeredAt: Date.now(),
           servedBy: done.servedBy ?? null, askChart: Boolean(done.askChart), openReport: Boolean(done.openReport), rating: null,
+          // Sin gráfica pedida, Resultados muestra primero los datos en tabla (el agente deja su sugerencia en chart).
+          showChart: done.showChart !== false,
           toolCalls: Array.isArray(done.toolCalls) ? done.toolCalls : [], usage: done.usage ?? null, iterations: done.iterations ?? null,
         });
         this.chat.conversationId = done.conversationId;

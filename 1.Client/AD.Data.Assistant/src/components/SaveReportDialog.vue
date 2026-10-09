@@ -22,9 +22,10 @@
 
       <template v-if="preview">
         <p class="m-0 mt-1 text-[13px] text-ink-soft">Gráfica del reporte</p>
-        <ChartPicker :spec="preview" :compact="width < 520" :help="false" @change="pick" />
+        <ChartPicker :spec="preview" :value="tableOnly ? TABLE_TYPE : null" :type-only="tableOnly" allow-table :compact="width < 520" :help="false" @change="pick" />
         <div class="rounded-lg border border-line bg-[#f8fbfd] p-3">
-          <GenericChart :spec="preview" :columns="result.columns" :rows="result.rows" />
+          <p v-if="tableOnly" class="m-0 text-[13px] text-ink-soft"><i class="fa-solid fa-table mr-1" aria-hidden="true" /> El reporte mostrará solo los datos en tabla.</p>
+          <GenericChart v-else :spec="preview" :columns="result.columns" :rows="result.rows" />
         </div>
       </template>
 
@@ -41,7 +42,7 @@
 import { computed, ref, watch } from 'vue';
 import { DxPopup } from 'devextreme-vue/popup';
 import { DxTextBox } from 'devextreme-vue/text-box';
-import { chartSpec } from '@/shared/resultView';
+import { TABLE_TYPE, chartSpec } from '@/shared/resultView';
 import ChartPicker from './ChartPicker.vue';
 import GenericChart from './GenericChart.vue';
 
@@ -78,6 +79,8 @@ const preview = computed(() => (props.charted && props.result
   ? chartSpec(props.result.columns, props.result.rows, props.chartHint, draft.value)
   : null));
 
+const tableOnly = computed(() => draft.value.type === TABLE_TYPE);
+
 function pick(change) {
   draft.value = { ...draft.value, ...change };
 }
@@ -88,7 +91,8 @@ function confirm() {
   if (!name.value.trim()) return;
   emit('confirm', {
     name: name.value.trim(),
-    ...(preview.value ? { chartType: preview.value.type, chartLines: preview.value.refLines.map(({ kind, value }) => (kind === 'value' ? { kind, value } : { kind })) } : {}),
+    ...(tableOnly.value ? { chartType: TABLE_TYPE, chartLines: [] } : {}),
+    ...(preview.value && !tableOnly.value ? { chartType: preview.value.type, chartLines: preview.value.refLines.map(({ kind, value }) => (kind === 'value' ? { kind, value } : { kind })) } : {}),
   });
 }
 </script>
