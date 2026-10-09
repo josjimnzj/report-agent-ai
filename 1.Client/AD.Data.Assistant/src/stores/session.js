@@ -2,10 +2,11 @@ import { defineStore } from 'pinia';
 import { streamQuery } from '@/services/dataAgentApi';
 import { newId } from '@/shared/ids';
 import { $notify } from '@/shared/notify';
+import { normalizeTags } from '@/shared/tags';
 import { useChatsStore } from './chats';
 import { SALES_COLUMNS, SALES_QUERIES, SALES_ROWS } from '@/mocks/salesByBranch';
 
-const blankChat = () => ({ id: newId(), title: '', icon: 'fa-message', conversationId: null, turns: [], createdAt: Date.now() });
+const blankChat = () => ({ id: newId(), title: '', tags: [], conversationId: null, turns: [], createdAt: Date.now() });
 
 // Estado del chat activo. No se persiste: un chat solo se guarda con «Guardar».
 export const useSessionStore = defineStore('session', {
@@ -39,7 +40,7 @@ export const useSessionStore = defineStore('session', {
     openChat(id) {
       const saved = useChatsStore().byId(id);
       if (!saved) return;
-      this.chat = JSON.parse(JSON.stringify(saved));
+      this.chat = { tags: [], ...JSON.parse(JSON.stringify(saved)) };
       this.savedId = saved.id;
       this.dirty = false;
       this.selectedTurnId = null;
@@ -54,11 +55,21 @@ export const useSessionStore = defineStore('session', {
       this.reportTitle = null;
       this.reportOverride = null;
     },
-    saveChat(title) {
+    saveChat(title, tags = this.chat.tags) {
       this.chat.title = title.trim() || this.chat.turns[0]?.question.slice(0, 60) || 'Chat sin título';
+      this.chat.tags = normalizeTags(tags);
       useChatsStore().upsert(this.chat);
       this.savedId = this.chat.id;
       this.dirty = false;
+    },
+    /** Cambia título y etiquetas de un chat guardado (y del activo si es el mismo). */
+    updateChat(id, { title, tags }) {
+      useChatsStore().update(id, { title, tags });
+      if (this.savedId === id) {
+        const saved = useChatsStore().byId(id);
+        this.chat.title = saved.title;
+        this.chat.tags = [...saved.tags];
+      }
     },
     persistIfSaved() {
       if (this.savedId) useChatsStore().upsert(this.chat);

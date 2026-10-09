@@ -26,19 +26,19 @@ const salesTurn = {
   runId: 'seed-run-1',
 };
 
-const chat = (id, title, icon, turns = [], updatedAt = at('2026-10-08T09:00:00')) => ({
-  id, title, icon, pinned: false, createdAt: updatedAt, updatedAt, conversationId: null, turns,
+const chat = (id, title, tags, turns = [], updatedAt = at('2026-10-08T09:00:00')) => ({
+  id, title, tags, pinned: false, createdAt: updatedAt, updatedAt, conversationId: null, turns,
 });
 
 export const SEED_CHATS = [
-  chat('seed-ventas', 'Análisis de ventas', 'fa-chart-simple', [salesTurn], at('2026-10-09T10:25:00')),
-  chat('seed-clientes', 'Clientes y retención', 'fa-user-group'),
-  chat('seed-oportunidades', 'Oportunidades comerciales', 'fa-handshake'),
-  chat('seed-sucursal', 'Desempeño por sucursal', 'fa-store'),
-  chat('seed-cartera', 'Cartera de clientes', 'fa-address-book'),
-  chat('seed-inventario', 'Inventario y abastecimiento', 'fa-boxes-stacked'),
-  chat('seed-ejecutivos', 'Indicadores ejecutivos', 'fa-gauge-high'),
-  chat('seed-campanas', 'Efectividad de campañas', 'fa-bullhorn', [], at('2026-09-20T09:00:00')),
+  chat('seed-ventas', 'Análisis de ventas', ['Ventas', 'Sucursales'], [salesTurn], at('2026-10-09T10:25:00')),
+  chat('seed-clientes', 'Clientes y retención', ['Clientes']),
+  chat('seed-oportunidades', 'Oportunidades comerciales', ['Ventas', 'Pipeline']),
+  chat('seed-sucursal', 'Desempeño por sucursal', ['Sucursales']),
+  chat('seed-cartera', 'Cartera de clientes', ['Clientes', 'Cobranza']),
+  chat('seed-inventario', 'Inventario y abastecimiento', ['Operación']),
+  chat('seed-ejecutivos', 'Indicadores ejecutivos', ['Dirección']),
+  chat('seed-campanas', 'Efectividad de campañas', ['Campañas'], [], at('2026-09-20T09:00:00')),
 ];
 
 const report = (id, title, kind, source = null) => ({

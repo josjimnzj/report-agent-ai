@@ -41,3 +41,13 @@ button { font: inherit; color: inherit; }
 
 .dx-viewport h1, .dx-viewport h2, .dx-viewport h3 { letter-spacing: normal; }
 .dx-viewport .section-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; color: theme('colors.ink.DEFAULT'); }
+
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid #d3e4f0; border-radius: 999px; background: #f1f7fb; color: #0a5b7d;
+  padding: 2px 10px; font-size: 12px; line-height: 1.4; white-space: nowrap;
+}
+.tag-chip-sm { padding: 0 7px; font-size: 11px; }
+button.tag-chip:hover { border-color: theme('colors.brandlight'); }
+button.tag-chip:focus-visible { outline: 2px solid theme('colors.brandlight'); outline-offset: 1px; }
+.tag-chip-active, button.tag-chip-active:hover { background: theme('colors.brandblue'); border-color: theme('colors.brandblue'); color: #fff; }

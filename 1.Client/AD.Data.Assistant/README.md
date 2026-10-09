@@ -41,7 +41,8 @@ En el plan gratuito, el servicio se duerme tras 15 minutos sin tráfico y la pri
 - DevExtreme y devextreme-vue 22.2 (`dx.light.css`, locale `es-MX`).
 - Tailwind 3 con los tokens `brandlight #009cdb` y `brandblue #074863`. Sin preflight y con `important: '.dx-viewport'` para que las utilidades ganen a `dx.light.css`.
 - Font Awesome 6.
-- Pinia con `pinia-plugin-persistedstate`. Las claves en localStorage son `ada.chats`, `ada.reports` y `ada.prefs`, y el esquema está en la versión 1 con `migrate`.
+- Pinia con `pinia-plugin-persistedstate`. Las claves en localStorage son `ada.chats`, `ada.reports` y `ada.prefs`.
+- El esquema está en la versión 2. La migración desde la versión 1 quita los iconos de las conversaciones y añade las etiquetas sin perder los chats guardados.
 - `exceljs` y `file-saver` para exportar a Excel.
 
 ## Estructura
@@ -54,17 +55,26 @@ src/
   stores/         chats y reports (persistidos), prefs (persistido), session (chat activo, no persistido)
   components/     ChatSidebar, ChatPanel, AssistantMessage, LiveProgress, Composer, ReportPanel,
                   KpiCard, BranchBarChart, MonthlyTrendChart, DetailTable, ShareDoughnut,
-                  InsightsList, ResultGrid, SqlPanel, PromptDialog
+                  InsightsList, ResultGrid, SqlPanel, PromptDialog, ChatDetailsDialog
   views/          AssistantView (menú + chat + resultados)
-test/             salesReport.test.js, persist.test.js
+test/             salesReport.test.js, persist.test.js, tags.test.js
 ```
 
 ## Qué hace la maqueta
 
 - **Menú lateral.**
-  - Conversaciones guardadas: abrir, fijar, renombrar y eliminar.
+  - Conversaciones guardadas: abrir, fijar, editar título y etiquetas, y eliminar.
   - Reportes guardados.
-  - Búsqueda y menú colapsable.
+  - Búsqueda por título o etiqueta, y menú colapsable.
+- **Etiquetas.**
+  - Hasta 6 por conversación, de texto libre.
+  - Se asignan al guardar el chat o después, con el botón de etiqueta de la cabecera o con el lápiz del menú.
+  - No se duplican aunque cambien mayúsculas o acentos.
+  - En el menú, las etiquetas en uso aparecen como filtros.
+- **Pantallas pequeñas (menos de 1200 px).**
+  - Se ve una vista a la vez, Chat o Resultados, con un selector arriba.
+  - El menú se abre como cajón lateral.
+  - «Análisis completado» lleva a Resultados, y un punto avisa cuando hay un resultado nuevo.
 - **Chat.**
   - Pregunta libre o sugerencias, con progreso en vivo por fases y duración.
   - Botón Detener.

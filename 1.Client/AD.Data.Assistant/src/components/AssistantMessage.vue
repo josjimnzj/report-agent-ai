@@ -23,7 +23,10 @@
       <span class="flex-1">
         <span class="block text-[14px] font-semibold text-ink">Análisis completado</span>
         <span class="mt-1 block text-[13px] leading-relaxed text-ink-soft">{{ turn.answer }}</span>
-        <span class="mt-1 block text-right text-[11.5px] muted">{{ time(turn.answeredAt) }}</span>
+        <span class="mt-1 flex items-center justify-between gap-2 text-[11.5px]">
+          <span v-if="compact" class="font-semibold text-brandlight">Ver resultados <i class="fa-solid fa-arrow-right" aria-hidden="true" /></span>
+          <span class="ml-auto muted">{{ time(turn.answeredAt) }}</span>
+        </span>
       </span>
     </button>
 
@@ -41,6 +44,7 @@ defineProps({
   turn: { type: Object, required: true },
   selected: Boolean,
   selectable: Boolean,
+  compact: Boolean,
 });
 defineEmits(['select']);
 

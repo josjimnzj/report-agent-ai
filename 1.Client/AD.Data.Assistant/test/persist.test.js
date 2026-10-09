@@ -13,11 +13,20 @@ test('compactTurn recorta filas y marca truncated', () => {
   assert.equal(small.totalRows, 1);
 });
 
-test('migrate acepta la versión actual y descarta otras', () => {
+test('migrate acepta la versión actual y descarta estados inválidos o futuros', () => {
   const defaults = { version: SCHEMA_VERSION, chats: [] };
   assert.deepEqual(migrate({ version: SCHEMA_VERSION, chats: [1] }, defaults), { version: SCHEMA_VERSION, chats: [1] });
-  assert.equal(migrate({ version: 0, chats: [1] }, defaults), defaults);
+  assert.equal(migrate({ version: SCHEMA_VERSION + 1, chats: [1] }, defaults), defaults);
   assert.equal(migrate(null, defaults), defaults);
+  assert.equal(migrate({ chats: [1] }, defaults), defaults);
+});
+
+test('migrate aplica las migraciones en orden y descarta si falta un paso', () => {
+  const defaults = { version: SCHEMA_VERSION, chats: [] };
+  const upgrades = { 1: (s) => ({ ...s, chats: s.chats.map(({ icon, ...c }) => ({ ...c, tags: [] })) }) };
+  const v1 = { version: 1, chats: [{ id: 'a', icon: 'fa-x' }] };
+  assert.deepEqual(migrate(v1, defaults, upgrades), { version: 2, chats: [{ id: 'a', tags: [] }] });
+  assert.equal(migrate(v1, defaults, {}), defaults);
 });
 
 test('createSafeStorage avisa al llenarse la cuota sin lanzar', () => {

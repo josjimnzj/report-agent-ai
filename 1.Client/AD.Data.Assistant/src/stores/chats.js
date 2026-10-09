@@ -1,22 +1,29 @@
 import { defineStore } from 'pinia';
 import { SEED_CHATS } from '@/mocks/seeds';
 import { SCHEMA_VERSION, compactTurn, migrate } from '@/shared/persist';
+import { normalizeTags, collectTags } from '@/shared/tags';
 import { safeStorage } from './storage';
 
 const defaults = () => ({ version: SCHEMA_VERSION, chats: structuredClone(SEED_CHATS) });
+
+// v1 → v2: se quitan los iconos y se añaden etiquetas.
+const UPGRADES = {
+  1: (s) => ({ ...s, chats: (s.chats ?? []).map(({ icon, ...c }) => ({ ...c, tags: c.tags ?? [] })) }),
+};
 
 export const useChatsStore = defineStore('chats', {
   state: defaults,
   getters: {
     sorted: (s) => [...s.chats].sort((a, b) => (b.pinned - a.pinned) || (b.updatedAt - a.updatedAt)),
     byId: (s) => (id) => s.chats.find((c) => c.id === id),
+    allTags: (s) => collectTags(s.chats),
   },
   actions: {
     upsert(chat) {
       const saved = {
         id: chat.id,
         title: chat.title,
-        icon: chat.icon ?? 'fa-message',
+        tags: normalizeTags(chat.tags),
         pinned: chat.pinned ?? false,
         createdAt: chat.createdAt ?? Date.now(),
         updatedAt: Date.now(),
@@ -33,6 +40,12 @@ export const useChatsStore = defineStore('chats', {
       const c = this.byId(id);
       if (c && title.trim()) c.title = title.trim();
     },
+    update(id, { title, tags }) {
+      const c = this.byId(id);
+      if (!c) return;
+      if (title?.trim()) c.title = title.trim();
+      if (tags) c.tags = normalizeTags(tags);
+    },
     togglePin(id) {
       const c = this.byId(id);
       if (c) c.pinned = !c.pinned;
@@ -44,6 +57,6 @@ export const useChatsStore = defineStore('chats', {
   persist: {
     key: 'ada.chats',
     storage: safeStorage,
-    serializer: { serialize: JSON.stringify, deserialize: (s) => migrate(JSON.parse(s), defaults()) },
+    serializer: { serialize: JSON.stringify, deserialize: (s) => migrate(JSON.parse(s), defaults(), UPGRADES) },
   },
 });

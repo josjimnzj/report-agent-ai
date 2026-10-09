@@ -1,24 +1,40 @@
 <template>
   <section class="card no-print flex h-full min-w-0 flex-col overflow-hidden" aria-label="Chat">
-    <header class="flex items-center gap-1 border-b border-line px-4 py-3">
-      <h1 class="m-0 flex-1 truncate text-[18px] font-semibold text-ink" :title="title">
-        {{ title }}
-        <span v-if="session.dirty" class="ml-1 align-middle text-[11px] font-normal text-ink-muted">· sin guardar</span>
-      </h1>
+    <header class="flex items-start gap-1 border-b border-line px-4 py-3">
+      <div class="min-w-0 flex-1">
+        <h1 class="m-0 truncate text-[18px] font-semibold text-ink" :title="title">
+          {{ title }}
+          <span v-if="session.dirty" class="ml-1 align-middle text-[11px] font-normal text-ink-muted">· sin guardar</span>
+        </h1>
+        <div v-if="session.chat.tags?.length" class="mt-1 flex flex-wrap gap-1" aria-label="Etiquetas">
+          <span v-for="t in session.chat.tags" :key="t" class="tag-chip tag-chip-sm">{{ t }}</span>
+        </div>
+      </div>
       <button type="button" class="icon-btn" title="Nuevo chat" @click="$emit('new-chat')">
-        <i class="fa-solid fa-pen-to-square" aria-hidden="true" />
+        <i class="fa-solid fa-pen-to-square" aria-hidden="true" /><span class="sr-only">Nuevo chat</span>
       </button>
       <button
+        v-if="session.isSaved"
+        type="button"
+        class="icon-btn"
+        title="Editar título y etiquetas"
+        @click="$emit('edit')"
+      >
+        <i class="fa-solid fa-tag" aria-hidden="true" /><span class="sr-only">Editar título y etiquetas</span>
+      </button>
+      <button
+        v-else
         type="button"
         class="icon-btn"
         :class="session.dirty ? 'text-brandlight' : ''"
-        :title="session.isSaved ? 'Chat guardado: se actualiza solo' : 'Guardar chat'"
-        :disabled="!session.chat.turns.length || session.isSaved"
+        title="Guardar chat"
+        :disabled="!session.chat.turns.length"
         @click="$emit('save')"
       >
-        <i class="fa-solid" :class="session.isSaved ? 'fa-circle-check' : 'fa-floppy-disk'" aria-hidden="true" />
+        <i class="fa-solid fa-floppy-disk" aria-hidden="true" /><span class="sr-only">Guardar chat</span>
       </button>
       <button
+        v-if="!compact"
         type="button"
         class="icon-btn"
         :title="prefs.chatExpanded ? 'Reducir chat' : 'Ampliar chat'"
@@ -53,7 +69,8 @@
           <AssistantMessage
             :turn="t"
             :selected="session.turnsWithData.length > 1 && session.selectedTurn?.id === t.id && !session.reportOverride"
-            :selectable="session.turnsWithData.length > 1"
+            :selectable="compact || session.turnsWithData.length > 1"
+            :compact="compact"
             @select="selectTurn(t)"
           />
         </template>
@@ -83,7 +100,8 @@ import AssistantMessage from './AssistantMessage.vue';
 import Composer from './Composer.vue';
 import SuggestionList from './SuggestionList.vue';
 
-defineEmits(['new-chat', 'save']);
+defineProps({ compact: Boolean });
+const emit = defineEmits(['new-chat', 'save', 'edit', 'show-results']);
 
 const session = useSessionStore();
 const prefs = usePrefsStore();
@@ -98,6 +116,7 @@ function send(q) {
 function selectTurn(t) {
   session.selectedTurnId = t.id;
   session.reportOverride = null;
+  emit('show-results');
 }
 
 // Mantener visible lo último: al llegar turnos o fases nuevas.

@@ -24,6 +24,6 @@ export const useReportsStore = defineStore('reports', {
   persist: {
     key: 'ada.reports',
     storage: safeStorage,
-    serializer: { serialize: JSON.stringify, deserialize: (s) => migrate(JSON.parse(s), defaults()) },
+    serializer: { serialize: JSON.stringify, deserialize: (s) => migrate(JSON.parse(s), defaults(), { 1: (st) => st }) },
   },
 });

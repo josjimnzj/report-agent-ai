@@ -1,5 +1,5 @@
 <template>
-  <section class="card print-full flex h-full min-w-0 flex-col overflow-hidden" aria-label="Resultados">
+  <section class="card print-full flex h-full min-w-0 flex-col" :class="narrow ? 'scroll-thin overflow-y-auto' : 'overflow-hidden'" aria-label="Resultados">
     <div v-if="!report" class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
       <i class="fa-solid fa-chart-pie text-[40px] text-[#c9d6e2]" aria-hidden="true" />
       <p class="m-0 text-[15px] font-semibold text-ink">Aquí verás los resultados</p>
@@ -7,10 +7,10 @@
     </div>
 
     <template v-else>
-      <header class="flex flex-wrap items-start gap-4 px-6 pb-2 pt-5">
+      <header class="flex flex-wrap items-start gap-3" :class="narrow ? 'px-4 pb-2 pt-4' : 'gap-4 px-6 pb-2 pt-5'">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <h2 v-if="!editingTitle" class="m-0 truncate text-[22px] font-semibold text-brandblue">{{ title }}</h2>
+            <h2 v-if="!editingTitle" class="m-0 truncate font-semibold text-brandblue" :class="narrow ? 'text-[18px]' : 'text-[22px]'">{{ title }}</h2>
             <input
               v-else
               ref="titleInput"
@@ -26,9 +26,9 @@
               <i class="fa-solid fa-pen text-[13px]" aria-hidden="true" />
             </button>
           </div>
-          <p class="m-0 mt-1 text-[13.5px] text-ink-soft">{{ description }}</p>
+          <p class="m-0 mt-1 text-ink-soft" :class="narrow ? 'text-[12.5px]' : 'text-[13.5px]'">{{ description }}</p>
         </div>
-        <div class="no-print w-[210px]">
+        <div class="no-print" :class="narrow ? 'w-full' : 'w-[210px]'">
           <DxSelectBox
             v-model:value="prefs.months"
             :items="PERIODS"
@@ -39,8 +39,8 @@
         </div>
       </header>
 
-      <div class="no-print flex flex-wrap items-end gap-2 border-b border-line px-6">
-        <div class="flex flex-1 gap-1" role="tablist" aria-label="Vistas del resultado">
+      <div class="no-print flex flex-wrap items-end gap-x-2 border-b border-line" :class="narrow ? 'px-2' : 'px-6'">
+        <div class="flex flex-1 gap-1" :class="narrow ? 'scroll-thin overflow-x-auto' : 'min-w-max'" role="tablist" aria-label="Vistas del resultado">
           <button
             v-for="t in TABS"
             :id="`tab-${t.id}`"
@@ -49,25 +49,34 @@
             role="tab"
             :aria-selected="tab === t.id"
             :aria-controls="`panel-${t.id}`"
-            class="-mb-px flex cursor-pointer items-center gap-2 border-0 border-b-[3px] bg-transparent px-3 py-2.5 text-[14px]"
+            class="-mb-px flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border-0 border-b-[3px] bg-transparent px-3 py-2.5 text-[14px]"
             :class="tab === t.id ? 'border-brandlight font-semibold text-brandblue' : 'border-transparent text-ink-soft hover:text-brandblue'"
             @click="tab = t.id"
           >
             <i class="fa-solid" :class="t.icon" aria-hidden="true" /> {{ t.label }}
           </button>
         </div>
-        <div class="flex flex-wrap gap-2 pb-2">
-          <button type="button" class="btn" @click="savingReport = true"><i class="fa-regular fa-bookmark" aria-hidden="true" /> Guardar reporte</button>
-          <button type="button" class="btn" @click="exportPdf"><i class="fa-regular fa-file-pdf" aria-hidden="true" /> Exportar PDF</button>
-          <button type="button" class="btn" @click="downloadMarkdown"><i class="fa-brands fa-markdown" aria-hidden="true" /> Generar Markdown</button>
-          <button type="button" class="btn btn-primary" @click="share"><i class="fa-solid fa-share-nodes" aria-hidden="true" /> Compartir</button>
+        <div class="flex gap-2 py-2" :class="narrow ? 'w-full justify-end' : 'flex-wrap'">
+          <button
+            v-for="a in ACTIONS"
+            :key="a.id"
+            type="button"
+            class="btn"
+            :class="[a.primary ? 'btn-primary' : '', narrow ? 'h-9 w-9 justify-center p-0' : '']"
+            :title="a.label"
+            @click="run(a.id)"
+          >
+            <i :class="a.icon" aria-hidden="true" />
+            <span :class="narrow ? 'sr-only' : ''">{{ a.label }}</span>
+          </button>
         </div>
       </div>
 
-      <div ref="body" class="scroll-thin print-full flex-1 overflow-y-auto bg-[#f8fbfd] p-5">
-        <div v-if="tab === 'results'" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
-          <div class="grid gap-4" :class="wide ? 'grid-cols-4' : 'grid-cols-2'">
-            <KpiCard v-for="k in report.kpis" :key="k.id" :kpi="k" />
+      <div ref="body" class="print-full bg-[#f8fbfd]" :class="narrow ? 'flex-none p-3' : 'scroll-thin flex-1 overflow-y-auto p-5'">
+        <div v-if="width === null" class="h-40" />
+        <div v-else-if="tab === 'results'" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
+          <div class="grid" :class="[wide ? 'grid-cols-4' : 'grid-cols-2', narrow ? 'gap-2' : 'gap-4']">
+            <KpiCard v-for="k in report.kpis" :key="k.id" :kpi="k" :compact="narrow" />
           </div>
           <div class="grid gap-4" :class="wide ? 'grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]' : 'grid-cols-1'">
             <article class="card min-w-0 p-4">
@@ -148,6 +157,12 @@ const TABS = [
   { id: 'sql', label: 'SQL', icon: 'fa-code' },
   { id: 'insights', label: 'Insights', icon: 'fa-lightbulb' },
 ];
+const ACTIONS = [
+  { id: 'save', label: 'Guardar reporte', icon: 'fa-regular fa-bookmark' },
+  { id: 'pdf', label: 'Exportar PDF', icon: 'fa-regular fa-file-pdf' },
+  { id: 'md', label: 'Generar Markdown', icon: 'fa-brands fa-markdown' },
+  { id: 'share', label: 'Compartir', icon: 'fa-solid fa-share-nodes', primary: true },
+];
 const DEFAULT_TITLE = 'Análisis de ventas por sucursal';
 
 const session = useSessionStore();
@@ -162,9 +177,11 @@ const savingReport = ref(false);
 
 // Distribución según el ancho real del panel (cambia al plegar el menú o ampliar el chat).
 const body = ref(null);
-const width = ref(1200);
-const wide = computed(() => width.value >= 820);
-const wider = computed(() => width.value >= 1080);
+// null hasta la primera medición: las gráficas no se dibujan con un ancho supuesto.
+const width = ref(null);
+const wide = computed(() => (width.value ?? 0) >= 820);
+const wider = computed(() => (width.value ?? 0) >= 1080);
+const narrow = computed(() => width.value !== null && width.value < 600);
 const observer = new ResizeObserver(([entry]) => { width.value = entry.contentRect.width; });
 watch(body, (el, old) => { if (old) observer.unobserve(old); if (el) observer.observe(el); });
 onBeforeUnmount(() => observer.disconnect());
@@ -209,6 +226,12 @@ function markdown() {
 }
 const slug = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+function run(action) {
+  if (action === 'save') savingReport.value = true;
+  else if (action === 'pdf') exportPdf();
+  else if (action === 'md') downloadMarkdown();
+  else share();
+}
 function downloadMarkdown() {
   saveAs(new Blob([markdown()], { type: 'text/markdown;charset=utf-8' }), `${slug(title.value) || 'reporte'}.md`);
 }
