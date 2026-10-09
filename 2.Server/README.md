@@ -99,7 +99,7 @@ El reporte siempre muestra una gráfica (la tabla va en la pestaña «Tabla»). 
 | `series` | Mezcla por columna: `{ column, type: bar\|line\|spline\|area\|scatter, axis: left\|right }` (p. ej. barras de ventas y monto como línea en el eje derecho) |
 | `refLines` | Líneas de referencia: `{ kind: average\|max\|min\|value, column, value, label }` (promedio, máximo y mínimo se calculan en el front con todas las filas; `value` para metas) |
 
-En Resultados el usuario cambia el tipo (lista agrupada), activa o quita la línea de promedio y abre la ayuda «¿Qué gráficas hay?» con todos los tipos, extras y ejemplos para pedírselos al asistente. Al **guardar un reporte** se elige la gráfica con vista previa; queda en el reporte (`chartType`, `chartAvg`) y se usa al reabrirlo.
+Las líneas de referencia son **opcionales**: el agente solo las agrega si se piden y por defecto no hay ninguna. En Resultados el usuario cambia el tipo (lista agrupada), elige líneas de referencia (promedio, máximo, mínimo y una meta en un valor fijo, todas opcionales) y abre la ayuda «¿Qué gráficas hay?» con todos los tipos, extras y ejemplos para pedírselos al asistente. Al **guardar un reporte** se elige la gráfica con vista previa; queda en el reporte (`chartType`, `chartLines`; `[]` = sin líneas) y se usa al reabrirlo.
 
 ## Desarrollo
 

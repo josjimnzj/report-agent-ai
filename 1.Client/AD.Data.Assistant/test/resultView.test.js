@@ -71,6 +71,14 @@ test('mezcla de series, segundo eje y líneas de referencia', () => {
   const combo = chartSpec(cols, r, null, { type: 'combo', avg: true });
   assert.deepEqual(combo.series, [{ column: 'Ventas', type: 'bar', axis: 'left' }, { column: 'Monto', type: 'line', axis: 'right' }]);
   assert.equal(combo.refLines[0].value, 15);
+  // Sin pedirlas no hay líneas de referencia.
+  assert.deepEqual(chartSpec(cols, r, null).refLines, []);
+  assert.deepEqual(chartSpec(cols, r, { type: 'bar', x: 'Mes', y: ['Ventas'] }).refLines, []);
+  // Las del usuario reemplazan a las del agente: [] las quita; conserva la etiqueta del agente para la misma meta.
+  assert.deepEqual(chartSpec(cols, r, hint, { lines: [] }).refLines, []);
+  const own = chartSpec(cols, r, hint, { lines: [{ kind: 'max' }, { kind: 'value', value: 18 }] });
+  assert.deepEqual(own.refLines.map((l) => [l.kind, l.value, l.label]), [['max', 20, 'Máximo de Ventas'], ['value', 18, 'Meta']]);
+  assert.equal(chartSpec(cols, r, null, { lines: [{ kind: 'value', value: 7 }] }).refLines[0].label, 'Meta de Ventas');
   // Pastel no lleva líneas ni series.
   assert.deepEqual(chartSpec(cols, r, hint, { type: 'pie', avg: true }).refLines, []);
   // Máximo y mínimo se calculan con los datos.

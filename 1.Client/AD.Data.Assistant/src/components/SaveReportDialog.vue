@@ -54,7 +54,7 @@ const props = defineProps({
   charted: Boolean,
   /** Sugerencia de gráfica del agente. */
   chartHint: { type: Object, default: null },
-  /** Elección actual del usuario: { type, avg }. */
+  /** Elección actual del usuario: { type, lines }. */
   choice: { type: Object, default: () => ({}) },
   hint: { type: String, default: '' },
 });
@@ -88,7 +88,7 @@ function confirm() {
   if (!name.value.trim()) return;
   emit('confirm', {
     name: name.value.trim(),
-    ...(preview.value ? { chartType: preview.value.type, chartAvg: preview.value.hasAverage } : {}),
+    ...(preview.value ? { chartType: preview.value.type, chartLines: preview.value.refLines.map(({ kind, value }) => (kind === 'value' ? { kind, value } : { kind })) } : {}),
   });
 }
 </script>

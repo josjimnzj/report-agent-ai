@@ -75,7 +75,13 @@ export const MAX_PIE = 10;
 export const INDEX_X = '#';
 export const TRANSPOSE_X = 'Indicador';
 export const TRANSPOSE_Y = 'Valor';
-const REF_LABEL = { average: 'Promedio', max: 'Máximo', min: 'Mínimo', value: 'Referencia' };
+const REF_LABEL = { average: 'Promedio', max: 'Máximo', min: 'Mínimo', value: 'Meta' };
+/** Líneas de referencia opcionales: ninguna por defecto, salvo que el agente o el usuario las pidan. */
+export const REF_LINE_KINDS = [
+  { id: 'average', label: 'Promedio' },
+  { id: 'max', label: 'Máximo' },
+  { id: 'min', label: 'Mínimo' },
+];
 
 const numbers = (rows, i) => rows.map((r) => r[i]).filter((v) => typeof v === 'number' && Number.isFinite(v));
 const maxAbs = (vals) => vals.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
@@ -83,7 +89,8 @@ const maxAbs = (vals) => vals.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
 /**
  * Gráfica del reporte. El reporte siempre grafica si hay alguna columna numérica. Base: la sugerencia del agente si es
  * coherente con los datos; si no, una deducida. Encima va lo que eligió el usuario.
- * @param {string | { type?: string, avg?: boolean }} [choice] elección del usuario: tipo y línea de promedio
+ * @param {string | { type?: string, lines?: { kind: string, value?: number }[], avg?: boolean }} [choice] elección del usuario:
+ *   tipo y líneas de referencia (`lines` reemplaza las del agente; `[]` las quita; sin `lines` se usan las del agente)
  * @returns {{ type: string, x: string, y: string[], rotated: boolean, transpose?: boolean,
  *   series: { column: string, type: string, axis: 'left'|'right' }[],
  *   refLines: { kind: string, column: string, value: number, label: string, axis: 'left'|'right' }[], hasAverage: boolean } | null}
@@ -148,8 +155,18 @@ export function chartSpec(columns, rows, hint, choice) {
     return { kind, column, value, label: l.label?.trim() || `${REF_LABEL[kind]}${spec.y.length > 1 ? ` de ${column}` : ''}`, axis: axisOf(column) };
   };
   let lines = base.lines.map(resolve).filter(Boolean);
-  if (pick.avg === false) lines = lines.filter((l) => l.kind !== 'average');
-  if (pick.avg === true && !lines.some((l) => l.kind === 'average')) lines.push(resolve({ kind: 'average', column: spec.y[0] }));
+  if (Array.isArray(pick.lines)) {
+    // Las del usuario mandan; conservan la etiqueta del agente si es la misma línea.
+    lines = pick.lines.map((u) => {
+      const same = base.lines.find((l) => l.kind === u.kind && (u.kind !== 'value' || l.value === u.value));
+      return resolve({ kind: u.kind, column: same?.column ?? spec.y[0], value: u.value ?? null, label: same?.label ?? '' });
+    }).filter(Boolean);
+  } else if (pick.avg === false) {
+    // Reportes guardados con la versión anterior (casilla de promedio).
+    lines = lines.filter((l) => l.kind !== 'average');
+  } else if (pick.avg === true && !lines.some((l) => l.kind === 'average')) {
+    lines.push(resolve({ kind: 'average', column: spec.y[0] }));
+  }
   spec.refLines = lines.filter(Boolean);
   spec.hasAverage = spec.refLines.some((l) => l.kind === 'average');
   return spec;

@@ -175,7 +175,7 @@
       :result="result"
       :charted="!sales"
       :chart-hint="result?.chart ?? null"
-      :choice="result ? { type: result.chartType ?? undefined, avg: result.chartAvg ?? undefined } : {}"
+      :choice="chartChoice"
       :hint="IS_API ? 'Se guarda en el servidor con el resultado actual.' : 'Se guarda en este navegador con el periodo y las sucursales actuales.'"
       @confirm="saveReport"
       @cancel="savingReport = false"
@@ -269,7 +269,13 @@ const sales = computed(() => Boolean(result.value) && isSalesResult(result.value
 // Traza y Log son de una respuesta del chat (no de un reporte guardado abierto).
 const turn = computed(() => (result.value?.turnId ? session.chat.turns.find((t) => t.id === result.value.turnId) ?? null : null));
 const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value) && ((t.id !== 'trace' && t.id !== 'log') || turn.value)));
-const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart, { type: result.value.chartType ?? undefined, avg: result.value.chartAvg ?? undefined }) : null));
+/** Elección del usuario sobre la gráfica (tipo y líneas de referencia); chartAvg es de reportes anteriores. */
+const chartChoice = computed(() => (result.value ? {
+  type: result.value.chartType ?? undefined,
+  lines: result.value.chartLines ?? undefined,
+  avg: result.value.chartAvg ?? undefined,
+} : {}));
+const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart, chartChoice.value) : null));
 const chartTitle = computed(() => {
   const c = chart.value;
   if (!c) return '';
@@ -309,11 +315,11 @@ function commitTitle() {
   editingTitle.value = false;
 }
 
-function saveReport({ name, chartType, chartAvg }) {
+function saveReport({ name, chartType, chartLines }) {
   // La gráfica elegida al guardar queda fija en el reporte y también en la vista actual.
-  if (chartType !== undefined || chartAvg !== undefined) session.setChartChoice({ type: chartType, avg: chartAvg });
+  if (chartType !== undefined || chartLines !== undefined) session.setChartChoice({ type: chartType, lines: chartLines });
   // Con el backend real se guarda una copia del resultado para poder reabrirlo sin volver a consultar.
-  const snapshot = { ...result.value, chartType: chartType ?? result.value.chartType ?? null, chartAvg: chartAvg ?? result.value.chartAvg ?? null };
+  const snapshot = { ...result.value, chartType: chartType ?? result.value.chartType ?? null, chartLines: chartLines ?? result.value.chartLines ?? null, chartAvg: null };
   delete snapshot.turnId;
   reports.add({
     title: name, kind: 'analisis', source: 'sales', months: prefs.months,

@@ -20,13 +20,33 @@
           </template>
         </DxSelectBox>
       </div>
-      <DxCheckBox
-        :value="spec.hasAverage"
-        :disabled="polar"
-        text="Línea de promedio"
-        :element-attr="{ title: polar ? 'No aplica a pastel ni dona' : 'Línea horizontal con el promedio de la primera medida' }"
-        @value-changed="(e) => e.event && $emit('change', { avg: e.value })"
-      />
+      <template v-if="!polar">
+        <div :class="compact ? 'w-full' : 'w-[230px]'">
+          <DxTagBox
+            :items="REF_LINE_KINDS"
+            :value="kinds"
+            value-expr="id"
+            display-expr="label"
+            :show-selection-controls="true"
+            :hide-selected-items="false"
+            apply-value-mode="instantly"
+            placeholder="Sin líneas de referencia"
+            :input-attr="{ 'aria-label': 'Líneas de referencia' }"
+            :element-attr="{ title: 'Opcional: líneas horizontales de promedio, máximo o mínimo' }"
+            @value-changed="(e) => e.event && emitLines(e.value, meta)"
+          />
+        </div>
+        <div :class="compact ? 'w-full' : 'w-[130px]'">
+          <DxNumberBox
+            :value="meta"
+            placeholder="Meta (opcional)"
+            format="#,##0.##"
+            :show-clear-button="true"
+            :input-attr="{ 'aria-label': 'Meta: línea en un valor fijo (opcional)' }"
+            @value-changed="(e) => e.event !== undefined && emitLines(kinds, e.value)"
+          />
+        </div>
+      </template>
       <button
         v-if="help"
         type="button"
@@ -58,7 +78,7 @@
           </ul>
         </section>
         <section>
-          <h4 class="m-0 mb-1 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">Extras en gráficas de ejes</h4>
+          <h4 class="m-0 mb-1 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">Extras opcionales en gráficas de ejes</h4>
           <ul class="m-0 flex list-none flex-col gap-1 p-0">
             <li v-for="x in CHART_EXTRAS" :key="x.label" class="px-1.5 py-1"><b class="text-ink">{{ x.label }}</b> <span class="text-ink-soft">· {{ x.help }}</span></li>
           </ul>
@@ -75,8 +95,9 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { DxSelectBox } from 'devextreme-vue/select-box';
-import { DxCheckBox } from 'devextreme-vue/check-box';
-import { CHART_EXTRAS, CHART_TYPES, POLAR_TYPES } from '@/shared/resultView';
+import { DxTagBox } from 'devextreme-vue/tag-box';
+import { DxNumberBox } from 'devextreme-vue/number-box';
+import { CHART_EXTRAS, CHART_TYPES, POLAR_TYPES, REF_LINE_KINDS } from '@/shared/resultView';
 
 const props = defineProps({
   /** Gráfica actual (de chartSpec). */
@@ -85,10 +106,19 @@ const props = defineProps({
   /** Muestra el botón de ayuda con los tipos disponibles. */
   help: { type: Boolean, default: true },
 });
-defineEmits(['change']);
+const emit = defineEmits(['change']);
 
 const GROUPED = [...new Set(CHART_TYPES.map((t) => t.group))].map((key) => ({ key, items: CHART_TYPES.filter((t) => t.group === key) }));
 const EXAMPLES = ['Ventas por mes en barras con una línea de promedio', 'Barras de ventas y línea de monto en el eje derecho', 'Agrega una meta en 500', 'Participación por sucursal en dona'];
 const polar = computed(() => POLAR_TYPES.has(props.spec.type));
 const helpOpen = ref(false);
+
+// Líneas de referencia actuales (las del agente o las elegidas): opcionales, ninguna por defecto.
+const kinds = computed(() => (props.spec.refLines ?? []).filter((l) => l.kind !== 'value').map((l) => l.kind));
+const meta = computed(() => (props.spec.refLines ?? []).find((l) => l.kind === 'value')?.value ?? null);
+function emitLines(k, m) {
+  const lines = (k ?? []).map((kind) => ({ kind }));
+  if (typeof m === 'number' && Number.isFinite(m)) lines.push({ kind: 'value', value: m });
+  emit('change', { lines });
+}
 </script>

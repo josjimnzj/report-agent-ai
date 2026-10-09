@@ -47,7 +47,7 @@ export const useSessionStore = defineStore('session', {
       const t = this.selectedTurn;
       return t ? {
         id: t.id, title: null, question: t.question, answer: t.answer, chart: t.view?.chart ?? null,
-        chartType: t.view?.chartType ?? null, chartAvg: t.view?.chartAvg ?? null, askChart: Boolean(t.askChart), turnId: t.kind === 'report' ? null : t.id,
+        chartType: t.view?.chartType ?? null, chartLines: t.view?.chartLines ?? null, chartAvg: t.view?.chartAvg ?? null, askChart: Boolean(t.askChart), turnId: t.kind === 'report' ? null : t.id,
         branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
         queries: t.queries, totalRows: t.totalRows ?? t.rows.length, truncated: Boolean(t.truncated),
       } : null;
@@ -99,7 +99,7 @@ export const useSessionStore = defineStore('session', {
         return {
           id: report.id, title: report.title, months: report.months ?? 6, branches: report.branches ?? null,
           columns: report.result.columns, rows: report.result.rows, queries: report.result.queries,
-          answer: report.result.answer, chart: report.result.chart, chartType: report.result.chartType ?? null, chartAvg: report.result.chartAvg ?? null,
+          answer: report.result.answer, chart: report.result.chart, chartType: report.result.chartType ?? null, chartLines: report.result.chartLines ?? null, chartAvg: report.result.chartAvg ?? null,
           totalRows: report.result.totalRows, reportId: report.id,
         };
       }
@@ -126,7 +126,7 @@ export const useSessionStore = defineStore('session', {
         id: newId(), kind: 'report', reportId: report.id, question: `Editar el reporte «${report.title}»`,
         askedAt: Date.now(), answeredAt: Date.now(), status: 'ok', phases: [],
         answer, columns: data.columns, rows: data.rows, queries: data.queries, totalRows: data.totalRows,
-        view: { branches: data.branches, chart: data.chart ?? null, chartType: data.chartType ?? null, chartAvg: data.chartAvg ?? null }, reportAnswer: data.answer ?? null,
+        view: { branches: data.branches, chart: data.chart ?? null, chartType: data.chartType ?? null, chartLines: data.chartLines ?? null, chartAvg: data.chartAvg ?? null }, reportAnswer: data.answer ?? null,
         elapsedMs: 0, runId: null,
       });
       this.reportTitle = report.title;
@@ -140,11 +140,11 @@ export const useSessionStore = defineStore('session', {
       return true;
     },
     /**
-     * Gráfica elegida por el usuario para un turno (o para el reporte guardado abierto): `type` y `avg`
-     * (línea de promedio). Solo cambia lo que se pasa.
+     * Gráfica elegida por el usuario para un turno (o para el reporte guardado abierto): `type` y `lines`
+     * (líneas de referencia; `[]` = ninguna). Solo cambia lo que se pasa.
      */
-    setChartChoice({ type, avg } = {}, turnId = null) {
-      const patch = { ...(type !== undefined ? { chartType: type } : {}), ...(avg !== undefined ? { chartAvg: avg } : {}) };
+    setChartChoice({ type, lines } = {}, turnId = null) {
+      const patch = { ...(type !== undefined ? { chartType: type } : {}), ...(lines !== undefined ? { chartLines: lines, chartAvg: null } : {}) };
       if (this.reportOverride && !turnId) {
         this.reportOverride = { ...this.reportOverride, ...patch };
         return;
