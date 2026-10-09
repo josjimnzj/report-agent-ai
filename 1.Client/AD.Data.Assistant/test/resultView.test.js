@@ -117,9 +117,15 @@ test('chartData agrupa el pastel en «Otros» y recorta las barras', () => {
   assert.ok(bar.truncated);
 });
 
-test('genericMarkdown incluye respuesta, tabla y SQL', () => {
-  const md = genericMarkdown({ title: 'Ventas', answer: 'Subieron.', columns: cols, rows, totalRows: 3, queries: ['SELECT 1'] });
-  assert.match(md, /^# Ventas\n\nSubieron\.\n/);
+test('genericMarkdown no incluye la respuesta del chat; tabla solo si no hay gráfica', () => {
+  const md = genericMarkdown({ title: 'Ventas', answer: '¿Lo llevamos a una gráfica?', columns: cols, rows, totalRows: 3, queries: ['SELECT 1'], insights: [{ kind: 'alert', title: 'Caída', text: 'Marzo bajó.' }] });
+  assert.match(md, /^# Ventas\n\n## Resultado\n/);
+  assert.doesNotMatch(md, /Lo llevamos/);
   assert.match(md, /\| 2026-01 \| 10 \| \$1,501 \|/);
+  assert.match(md, /- \*\*Alerta · Caída:\*\* Marzo bajó\./);
   assert.match(md, /```sql\nSELECT 1\n```/);
+  // Con gráfica: la imagen y no la tabla.
+  const withChart = genericMarkdown({ title: 'Ventas', columns: cols, rows, charts: [{ title: 'Ventas por Mes', src: 'data:image/svg+xml;base64,AAA', legend: ['Enero: 10'] }] });
+  assert.match(withChart, /## Gráfica\n\n### Ventas por Mes\n\n!\[Ventas por Mes\]\(data:image\/svg\+xml;base64,AAA\)\n\n- Enero: 10/);
+  assert.doesNotMatch(withChart, /## Resultado|\| 2026-01/);
 });

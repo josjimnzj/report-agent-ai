@@ -90,7 +90,8 @@
       <div ref="body" class="print-full bg-[#f8fbfd]" :class="narrow ? 'flex-none p-3' : 'scroll-thin flex-1 overflow-y-auto p-5'">
         <div v-if="width === null" class="h-40" />
         <div v-else-if="tab === 'results' && !sales" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
-          <article v-if="result.answer" class="card flex gap-3 p-4">
+          <!-- La respuesta del chat no se exporta: a veces es una pregunta o un comentario. -->
+          <article v-if="result.answer" class="no-print card flex gap-3 p-4">
             <i class="fa-solid fa-comment-dots mt-0.5 text-brandlight" aria-hidden="true" />
             <p class="m-0 text-[14px] leading-relaxed text-ink">{{ result.answer }}</p>
           </article>
@@ -230,6 +231,7 @@ import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
 import { IS_API } from '@/services/mode';
 import { TABLE_TYPE, chartTypeLabel, genericMarkdown, isSalesResult, resultDisplay } from '@/shared/resultView';
 import { fmtInt } from '@/shared/salesReport';
+import { copyText } from '@/shared/clipboard';
 
 const TABS = [
   { id: 'results', label: 'Resultados', icon: 'fa-chart-column' },
@@ -352,9 +354,37 @@ function saveReport({ name, chartType, chartLines }) {
   $notify.success(`Reporte «${name}» guardado.`);
 }
 
-function markdown() {
-  if (!sales.value) return genericMarkdown({ title: title.value, ...result.value });
-  return buildMarkdown(report.value, { title: title.value, description: description.value, insights: insights.value, queries: result.value.queries });
+/**
+ * Gráficas de la pestaña Resultados como imágenes SVG (data URI) para el Markdown, con su leyenda en texto.
+ * Si no hay gráfica (vista de tabla), la lista queda vacía y se exporta la tabla.
+ */
+async function chartImages() {
+  if (tab.value !== 'results') {
+    tab.value = 'results';
+    await nextTick();
+    await new Promise((r) => { setTimeout(r, 400); });
+  }
+  const panel = body.value?.querySelector('#panel-results');
+  if (!panel) return [];
+  return [...panel.querySelectorAll('article')].flatMap((card) => {
+    const svg = [...card.querySelectorAll('svg')].find((s) => s.getBoundingClientRect().width > 120);
+    if (!svg) return [];
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const markup = new XMLSerializer().serializeToString(clone);
+    const src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(markup)))}`;
+    const legend = [...card.querySelectorAll('ul li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    return [{ title: card.querySelector('h3')?.textContent.trim() || 'Gráfica', src, legend }];
+  });
+}
+
+async function markdown() {
+  const charts = sales.value || !display.value.table ? await chartImages() : [];
+  if (!sales.value) {
+    const { title: _t, answer: _a, ...r } = result.value;
+    return genericMarkdown({ ...r, title: title.value, charts });
+  }
+  return buildMarkdown(report.value, { title: title.value, description: description.value, insights: insights.value, queries: result.value.queries, charts });
 }
 const slug = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -364,8 +394,8 @@ function run(action) {
   else if (action === 'md') downloadMarkdown();
   else share();
 }
-function downloadMarkdown() {
-  saveAs(new Blob([markdown()], { type: 'text/markdown;charset=utf-8' }), `${slug(title.value) || 'reporte'}.md`);
+async function downloadMarkdown() {
+  saveAs(new Blob([await markdown()], { type: 'text/markdown;charset=utf-8' }), `${slug(title.value) || 'reporte'}.md`);
 }
 function exportPdf() {
   // El diálogo de impresión del navegador permite «Guardar como PDF»; los estilos @media print ocultan menú y chat.
@@ -373,11 +403,7 @@ function exportPdf() {
   nextTick(() => window.print());
 }
 async function share() {
-  try {
-    await navigator.clipboard.writeText(markdown());
-    $notify.success('Resumen del reporte copiado al portapapeles (Markdown).');
-  } catch {
-    $notify.error('No se pudo copiar: el navegador bloqueó el portapapeles.');
-  }
+  if (await copyText(await markdown())) $notify.success('Resumen del reporte copiado al portapapeles (Markdown).');
+  else $notify.error('No se pudo copiar: el navegador bloqueó el portapapeles.');
 }
 </script>

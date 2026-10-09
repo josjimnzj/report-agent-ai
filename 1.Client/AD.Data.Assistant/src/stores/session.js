@@ -47,7 +47,7 @@ export const useSessionStore = defineStore('session', {
       if (this.reportOverride) return this.reportOverride;
       const t = this.selectedTurn;
       return t ? {
-        id: t.id, title: null, question: t.question, answer: t.answer, chart: t.view?.chart ?? null,
+        id: t.id, title: null, question: t.sourceQuestion ?? t.question, answer: t.answer, chart: t.view?.chart ?? null,
         chartType: t.view?.chartType ?? null, chartLines: t.view?.chartLines ?? null, chartAvg: t.view?.chartAvg ?? null, askChart: Boolean(t.askChart), showChart: t.showChart !== false, display: t.display ?? null, insights: t.insights ?? [], turnId: t.kind === 'report' ? null : t.id,
         branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
         queries: t.queries, totalRows: t.totalRows ?? t.rows.length, truncated: Boolean(t.truncated),

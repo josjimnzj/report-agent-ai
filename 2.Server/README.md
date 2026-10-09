@@ -98,6 +98,8 @@ La respuesta final del agente incluye `chart`, `display`, `reusePrevious`, `askC
 - `openReport`: el usuario pidió verlo en el reporte; el front abre Resultados.
 - El selector de tipo incluye «Solo tabla (sin gráfica)» para volver a los datos.
 
+**Exportar (PDF, Markdown, Compartir):** no se incluye la respuesta del chat (a veces es una pregunta o un comentario). Con gráfica se exporta la gráfica (en Markdown como imagen SVG incrustada, con su leyenda en texto) y no la tabla, que sigue en su pestaña; la tabla se exporta solo cuando el reporte no tiene gráfica (tabla primero o «Solo tabla»). Se incluyen insights y SQL. En el tablero de ventas, las tablas de detalle y participación se cambian por sus gráficas.
+
 `chart` (DevExtreme dxChart / dxPieChart):
 
 | Campo | Valores |

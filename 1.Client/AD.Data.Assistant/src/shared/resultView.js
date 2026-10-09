@@ -220,11 +220,26 @@ export const INSIGHT_KINDS = {
 export const rowsAsObjects = (columns, rows) =>
   rows.map((r, n) => Object.fromEntries([['__row', n], ...columns.map((c, i) => [c, r[i]])]));
 
-export function genericMarkdown({ title, answer, columns, rows, totalRows, queries = [], insights = [] }) {
+/** Imagen Markdown (data URI) de una gráfica exportada: { title, src, legend? }. */
+export function chartMarkdown({ title, src, legend = [] }) {
+  const lines = [`### ${title}`, '', `![${title.replace(/[[\]]/g, '')}](${src})`];
+  if (legend.length) lines.push('', ...legend.map((l) => `- ${l}`));
+  return lines;
+}
+
+/**
+ * Markdown del reporte. No incluye la respuesta del chat (a veces es una pregunta o un comentario). Con gráfica se
+ * exporta la gráfica; la tabla de datos solo cuando el reporte no tiene gráfica (sigue en su pestaña).
+ * @param {{ title: string, columns: string[], rows: any[][], totalRows?: number, queries?: string[], insights?: object[],
+ *   charts?: { title: string, src: string, legend?: string[] }[] }} r
+ */
+export function genericMarkdown({ title, columns, rows, totalRows, queries = [], insights = [], charts = [] }) {
   const esc = (v) => String(v).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [`# ${title}`, ''];
-  if (answer) lines.push(answer, '');
-  if (columns.length) {
+  if (charts.length) {
+    lines.push('## Gráfica', '');
+    for (const c of charts) lines.push(...chartMarkdown(c), '');
+  } else if (columns.length) {
     lines.push('## Resultado', '', `| ${columns.map(esc).join(' | ')} |`, `|${columns.map(() => '---').join('|')}|`);
     for (const r of rows.slice(0, 200)) lines.push(`| ${r.map((v, i) => esc(formatValue(v, columns[i]))).join(' | ')} |`);
     const total = totalRows ?? rows.length;

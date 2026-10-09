@@ -170,7 +170,11 @@ export function buildInsights(report) {
   return insights;
 }
 
-export function buildMarkdown(report, { title, description, insights = buildInsights(report), queries = [] } = {}) {
+/**
+ * Markdown del tablero de ventas. Con `charts` (imágenes de las gráficas del tablero) se exportan las gráficas en
+ * lugar de las tablas de detalle y participación, que siguen en la pestaña Tabla.
+ */
+export function buildMarkdown(report, { title, description, insights = buildInsights(report), queries = [], charts = [] } = {}) {
   const lines = [];
   lines.push(`# ${title ?? 'Reporte'}`, '');
   if (description) lines.push(description, '');
@@ -178,6 +182,21 @@ export function buildMarkdown(report, { title, description, insights = buildInsi
   for (const k of report.kpis) {
     const d = k.delta == null ? '—' : k.unit === 'pp' ? `${signed(k.delta, 1)} pp` : `${signed(k.delta, 1)}%`;
     lines.push(`| ${k.label} | ${k.display} | ${d} |`);
+  }
+  if (charts.length) {
+    lines.push('', '## Gráficas', '');
+    for (const c of charts) {
+      lines.push(`### ${c.title}`, '', `![${c.title}](${c.src})`);
+      if (c.legend?.length) lines.push('', ...c.legend.map((l) => `- ${l}`));
+      lines.push('');
+    }
+    lines.push('## Insights clave', '');
+    insights.forEach((i, n) => lines.push(`${n + 1}. **${i.title}.** ${i.text}`));
+    if (queries.length) {
+      lines.push('', '## SQL', '');
+      for (const q of queries) lines.push('```sql', q, '```', '');
+    }
+    return lines.join('\n').trimEnd() + '\n';
   }
   lines.push('', '## Detalle de ventas por sucursal', '');
   lines.push(`| Mes | ${report.branches.join(' | ')} | Total |`);

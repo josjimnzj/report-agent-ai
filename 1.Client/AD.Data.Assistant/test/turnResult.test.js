@@ -23,6 +23,7 @@ test('«solo tabla» sobre el resultado anterior: reutiliza datos y fija la tabl
   assert.equal(t.askChart, false);
   assert.deepEqual(t.insights, prev.insights); // sin insights nuevos se conservan
   assert.deepEqual(t.view.chart, prev.view.chart);
+  assert.equal(turnFromDone({ status: 'ok', columns: [], reusePrevious: true }, { ...prev, question: 'Ventas por mes' }).sourceQuestion, 'Ventas por mes');
 });
 
 test('otra gráfica sobre el anterior y consulta nueva', () => {

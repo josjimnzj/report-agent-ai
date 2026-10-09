@@ -25,6 +25,8 @@ export function turnFromDone(done, previous = null) {
     truncated: reuse ? Boolean(previous.truncated) : undefined,
     queries: reuse ? previous.queries ?? [] : done.queries ?? [],
     view, display, showChart: display === 'chart', reused: reuse, insights,
+    // El reporte conserva el título de la pregunta que trajo los datos, no «Ahora solo tabla».
+    sourceQuestion: reuse ? previous.sourceQuestion ?? previous.question ?? null : null,
     askChart: display === 'chart' && Boolean(done.askChart), openReport: Boolean(done.openReport),
   };
 }

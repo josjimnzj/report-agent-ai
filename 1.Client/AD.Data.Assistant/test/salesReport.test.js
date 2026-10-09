@@ -69,3 +69,12 @@ test('buildMarkdown incluye indicadores, detalle, participación y SQL', () => {
   assert.match(md, /\| Junio \| 47,100 \|/);
   assert.match(md, /```sql\nSELECT 1\n```/);
 });
+
+test('buildMarkdown con gráficas no exporta las tablas de detalle ni participación', () => {
+  const r = buildReport(SALES_COLUMNS, SALES_ROWS, { months: 6 });
+  const md = buildMarkdown(r, { title: 'Ventas', charts: [{ title: 'Ventas por sucursal', src: 'data:image/svg+xml;base64,AAA' }] });
+  assert.match(md, /\| Ventas totales \| \$1,059,500 \|/); // indicadores
+  assert.match(md, /### Ventas por sucursal\n\n!\[Ventas por sucursal\]\(data:image/);
+  assert.doesNotMatch(md, /Detalle de ventas por sucursal|\| Junio \| 47,100 \|/);
+  assert.match(md, /## Insights clave/);
+});
