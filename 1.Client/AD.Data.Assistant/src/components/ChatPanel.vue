@@ -61,7 +61,7 @@
             :rateable="telemetryOn"
             @action="(mode) => $emit('report-action', mode, turnContext(t))"
             @chart="(type) => { session.setChartType(type, t.id); selectTurn(t); }"
-            @rate="(rating) => session.rate(t.id, rating)"
+            @rate="(rating, extra) => rateTurn(t, rating, extra)"
           />
         </template>
 
@@ -141,6 +141,10 @@ function turnContext(t) {
     title: session.reportTitle ?? DEFAULT_REPORT_TITLE, months: prefs.months,
     branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows, reportId: t.reportId ?? null, chatId: session.savedId,
   };
+}
+async function rateTurn(t, rating, { tags = [], comment = null, done } = {}) {
+  const ok = await session.rate(t.id, rating, { tags, comment });
+  done?.(ok);
 }
 function selectTurn(t) {
   session.selectedTurnId = t.id;

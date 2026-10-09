@@ -75,6 +75,17 @@ Portada de workflow-agent-api. Con `Telemetry__ConnectionString` cada ejecución
 
 Ejemplo: `select model, count(*), avg(f.rating) from runs r join feedback f on f.run_id = r.id group by model;`
 
+### Traza, log e historial en el front
+
+Igual que en workflow-agent-api:
+
+- **Traza** (pestaña de Resultados): tokens de entrada, salida y caché, iteraciones, duración, modelo que sirvió, y cada llamada a herramienta con su entrada y la vista previa del resultado (`toolCalls` del evento `done`).
+- **Log** (pestaña de Resultados): cada evento SSE con su tiempo desde el inicio: `request` (proveedor, modelo, esfuerzo, respaldo, max_tokens, iteraciones, tamaño del prompt, herramientas), fases, razonamiento, texto del modelo, herramientas (entrada y resultado), fin de cada iteración con tokens, fin y errores. Botones para copiar el log del turno, el de toda la conversación o todo (petición, respuesta, SQL, traza y log). El log se guarda con el chat (recortado: 4 000 caracteres por entrada y 120 000 por turno).
+- **Valoración**: 👍 se guarda al momento; 👎 pide motivos (mismos que workflow-agent-api) y un comentario.
+- **Historial y métricas** (menú lateral): filtros por periodo, valoración, modelo, modo y estado, búsqueda libre, resumen por modelo (acierto, errores, límites, iteraciones, tokens y segundos promedio), lista paginada con la traza y el log guardados de cada ejecución, copia del detalle en JSON y exportación a CSV o JSON completo.
+
+El agente marca sus ejecuciones con `mode = "query"`; si la base se comparte con workflow-agent-api, el filtro «Modo» también muestra las de `workflow`.
+
 ## Gráficas y reporte
 
 El reporte siempre muestra una gráfica (la tabla va en la pestaña «Tabla»). La respuesta final del agente incluye `chart`, `askChart` (no tenía claro el tipo de gráfica: propone una y pregunta) y `openReport` (el usuario pidió verlo en el reporte: el front abre Resultados). El usuario puede cambiar entre barras, líneas y pastel en el reporte o con los botones bajo la respuesta.

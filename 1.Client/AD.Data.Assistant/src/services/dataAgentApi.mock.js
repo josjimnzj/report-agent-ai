@@ -65,11 +65,14 @@ const MODEL_FACTOR = { 'claude-sonnet-5-5': 0.8, 'claude-haiku-4-5': 0.5, 'claud
  * @param {{ question: string, conversationId?: string|null, model?: string, effort?: string|null }} body
  * @param {{ signal?: AbortSignal, onEvent?: (e: object) => void }} [opts]
  */
-export async function streamQuery(body, { signal, onEvent = () => {} } = {}) {
+export async function streamQuery(body, { signal, onEvent = () => {}, onRaw = () => {} } = {}) {
   const started = performance.now();
+  const t = () => Math.round(performance.now() - started);
+  onRaw('request', { t: 0, provider: 'maqueta', model: body.model, effort: body.effort, maxTokens: 0, maxIterations: 0, systemChars: 0, tools: [] });
   const factor = (EFFORT_FACTOR[body.effort] ?? 1) * (MODEL_FACTOR[body.model] ?? 1);
   for (const phase of MOCK_PHASES) {
     onEvent({ type: 'status', phase: phase.id, label: phase.label, at: performance.now() });
+    onRaw('status', { t: t(), phase: phase.id, label: phase.label });
     await wait(Math.round(phase.ms * factor), signal);
   }
   const { answer, branches } = answerFor(body.question);
@@ -81,14 +84,16 @@ export async function streamQuery(body, { signal, onEvent = () => {} } = {}) {
     rows: SALES_ROWS,
     queries: SALES_QUERIES,
     view: { branches },
-    toolCalls: 3,
-    usage: { inputTokens: 0, outputTokens: 0 },
+    toolCalls: [],
+    iterations: 1,
+    usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
     elapsedMs: Math.round(performance.now() - started),
     runId: newId(),
     // Como el agente real: «muéstramelo en el reporte» abre Resultados.
     openReport: /\b(reporte|gr[aá]fic[ao]|tablero|dashboard)\b/i.test(body.question),
     askChart: false,
   };
+  onRaw('done', { ...done, t: t() });
   onEvent({ type: 'done', data: done, at: performance.now() });
   return done;
 }

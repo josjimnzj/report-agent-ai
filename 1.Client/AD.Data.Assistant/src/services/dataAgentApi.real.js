@@ -8,10 +8,11 @@ export async function getModels() {
 
 /**
  * @param {{ question: string, conversationId?: string|null, model?: string, effort?: string|null }} body
- * @param {{ signal?: AbortSignal, onEvent?: (e: object) => void }} [opts]
+ * @param {{ signal?: AbortSignal, onEvent?: (e: object) => void, onRaw?: (event: string, data: object) => void }} [opts]
+ *   onEvent: fases y fin; onRaw: cada evento SSE tal cual (para el log del turno)
  * @returns {Promise<object>} payload del evento «done»
  */
-export async function streamQuery(body, { signal, onEvent = () => {} } = {}) {
+export async function streamQuery(body, { signal, onEvent = () => {}, onRaw = () => {} } = {}) {
   const res = await apiFetch('/api/agent/query/stream', { method: 'POST', body, signal, headers: { Accept: 'text/event-stream' } });
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -25,8 +26,10 @@ export async function streamQuery(body, { signal, onEvent = () => {} } = {}) {
       let d;
       try { d = JSON.parse(data); } catch { continue; }
       const at = performance.now();
+      onRaw(event, d);
       if (event === 'status') {
-        onEvent({ type: 'status', phase: d.phase ?? `msg-${d.t}`, label: d.label ?? d.message ?? '', at });
+        // Solo los estados con fase son pasos del progreso; el resto («Claude pensando…») va al log.
+        if (d.phase) onEvent({ type: 'status', phase: d.phase, label: d.label ?? '', at });
       } else if (event === 'done') {
         done = d;
         onEvent({ type: 'done', data: d, at });

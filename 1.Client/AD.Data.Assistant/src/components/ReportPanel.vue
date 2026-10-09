@@ -169,6 +169,14 @@
           <SqlPanel :queries="result.queries" />
         </div>
 
+        <div v-else-if="tab === 'trace' && turn" id="panel-trace" role="tabpanel" aria-labelledby="tab-trace">
+          <TracePanel :turn="turn" />
+        </div>
+
+        <div v-else-if="tab === 'log' && turn" id="panel-log" role="tabpanel" aria-labelledby="tab-log">
+          <LogPanel :turn="turn" :turns="session.chat.turns" />
+        </div>
+
         <div v-else id="panel-insights" role="tabpanel" aria-labelledby="tab-insights">
           <InsightsList :insights="insights" :columns="wide ? 2 : 1" cards />
         </div>
@@ -207,6 +215,8 @@ import SqlPanel from './SqlPanel.vue';
 import PromptDialog from './PromptDialog.vue';
 import KebabMenu from './KebabMenu.vue';
 import GenericChart from './GenericChart.vue';
+import TracePanel from './TracePanel.vue';
+import LogPanel from './LogPanel.vue';
 import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
 import { IS_API } from '@/services/mode';
 import { CHART_TYPES, chartSpec, genericMarkdown, isSalesResult } from '@/shared/resultView';
@@ -217,6 +227,8 @@ const TABS = [
   { id: 'table', label: 'Tabla', icon: 'fa-table' },
   { id: 'sql', label: 'SQL', icon: 'fa-code' },
   { id: 'insights', label: 'Insights', icon: 'fa-lightbulb' },
+  { id: 'trace', label: 'Traza', icon: 'fa-route' },
+  { id: 'log', label: 'Log', icon: 'fa-terminal' },
 ];
 const ACTIONS = [
   { id: 'save', label: 'Guardar reporte', icon: 'fa-regular fa-bookmark' },
@@ -265,7 +277,9 @@ function actionContext() {
   };
 }
 const sales = computed(() => Boolean(result.value) && isSalesResult(result.value.columns));
-const tabs = computed(() => (sales.value ? TABS : TABS.filter((t) => t.id !== 'insights')));
+// Traza y Log son de una respuesta del chat (no de un reporte guardado abierto).
+const turn = computed(() => (result.value?.turnId ? session.chat.turns.find((t) => t.id === result.value.turnId) ?? null : null));
+const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value) && ((t.id !== 'trace' && t.id !== 'log') || turn.value)));
 const chart = computed(() => (result.value && !sales.value ? chartSpec(result.value.columns, result.value.rows, result.value.chart, result.value.chartType) : null));
 const chartTitle = computed(() => {
   const c = chart.value;

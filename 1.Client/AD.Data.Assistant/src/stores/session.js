@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { streamQuery } from '@/services/dataAgentApi';
 import { sendFeedback } from '@/services/telemetryApi';
+import { capLog, capture } from '@/shared/runLog';
 import { newId } from '@/shared/ids';
 import { $notify } from '@/shared/notify';
 import { normalizeTags } from '@/shared/tags';
@@ -46,7 +47,7 @@ export const useSessionStore = defineStore('session', {
       const t = this.selectedTurn;
       return t ? {
         id: t.id, title: null, question: t.question, answer: t.answer, chart: t.view?.chart ?? null,
-        chartType: t.view?.chartType ?? null, askChart: Boolean(t.askChart),
+        chartType: t.view?.chartType ?? null, askChart: Boolean(t.askChart), turnId: t.kind === 'report' ? null : t.id,
         branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
         queries: t.queries, totalRows: t.totalRows ?? t.rows.length, truncated: Boolean(t.truncated),
       } : null;
@@ -149,18 +150,20 @@ export const useSessionStore = defineStore('session', {
       turn.view = { ...(turn.view ?? {}), chartType: type };
       this.persistIfSaved();
     },
-    /** Valoración 👍/👎 de una respuesta (telemetría del servidor). */
-    async rate(turnId, rating) {
+    /** Valoración 👍/👎 de una respuesta (telemetría del servidor); 👎 puede llevar motivos y comentario. */
+    async rate(turnId, rating, { tags = [], comment = null } = {}) {
       const turn = this.chat.turns.find((t) => t.id === turnId);
-      if (!turn?.runId) return;
-      const previous = turn.rating ?? null;
-      turn.rating = rating;
+      if (!turn?.runId) return false;
+      const previous = { rating: turn.rating ?? null, ratingTags: turn.ratingTags ?? [], ratingComment: turn.ratingComment ?? null };
+      Object.assign(turn, { rating, ratingTags: tags, ratingComment: comment });
       try {
-        await sendFeedback(turn.runId, rating);
+        await sendFeedback(turn.runId, rating, { tags, comment });
         this.persistIfSaved();
+        return true;
       } catch (err) {
-        turn.rating = previous;
+        Object.assign(turn, previous);
         $notify.handleError(err);
+        return false;
       }
     },
     stop() {
@@ -183,6 +186,7 @@ export const useSessionStore = defineStore('session', {
         id: newId(), question: q, askedAt: Date.now(), status: 'running', answer: '', phases: [],
         columns: [], rows: [], queries: [], view: null, elapsedMs: 0, runId: null,
         model: run.model, modelLabel: run.label, effort: run.effort, provider: run.provider, note,
+        log: [], toolCalls: [], usage: null, iterations: null,
       };
       this.chat.turns.push(turn);
       const live = this.chat.turns.at(-1);
@@ -195,6 +199,7 @@ export const useSessionStore = defineStore('session', {
           { question: withReportContext(this.chat, q), conversationId: this.chat.conversationId, model: run.model, effort: run.effort },
           {
             signal: this.controller.signal,
+            onRaw: (event, data) => capture(live.log, event, data),
             onEvent: (e) => {
               if (e.type === 'status') {
                 closePhase(e.at);
@@ -211,6 +216,7 @@ export const useSessionStore = defineStore('session', {
           status: done.status, answer: done.answer, columns: done.columns, rows: done.rows, totalRows: done.totalRows ?? done.rows?.length,
           queries: done.queries, view: done.view, elapsedMs: done.elapsedMs, runId: done.runId, answeredAt: Date.now(),
           servedBy: done.servedBy ?? null, askChart: Boolean(done.askChart), openReport: Boolean(done.openReport), rating: null,
+          toolCalls: Array.isArray(done.toolCalls) ? done.toolCalls : [], usage: done.usage ?? null, iterations: done.iterations ?? null,
         });
         this.chat.conversationId = done.conversationId;
         this.selectedTurnId = live.id;
@@ -224,6 +230,7 @@ export const useSessionStore = defineStore('session', {
         live.answeredAt = Date.now();
         $notify.handleError(err);
       } finally {
+        live.log = capLog(live.log);
         this.running = false;
         this.controller = null;
         this.persistIfSaved();

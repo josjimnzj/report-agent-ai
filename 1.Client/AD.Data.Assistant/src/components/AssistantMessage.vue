@@ -57,7 +57,7 @@
       </button>
     </div>
 
-    <div v-if="rateable && turn.runId && (turn.status === 'ok' || turn.status === 'max_iterations') && turn.kind !== 'report'" class="-mt-1 flex items-center gap-1 pl-1" role="group" aria-label="Valorar la respuesta">
+    <div v-if="canRate" class="-mt-1 flex flex-wrap items-center gap-1 pl-1" role="group" aria-label="Valorar la respuesta">
       <span class="mr-1 text-[12px] muted">{{ turn.rating ? 'Gracias por valorar' : '¿Te sirvió?' }}</span>
       <button
         v-for="r in RATINGS"
@@ -67,11 +67,42 @@
         :class="turn.rating === r.value ? r.active : 'text-ink-soft'"
         :title="r.label"
         :aria-pressed="turn.rating === r.value"
-        @click="$emit('rate', r.value)"
+        :aria-expanded="r.value === -1 ? badOpen : undefined"
+        @click="pick(r.value)"
       >
         <i :class="[turn.rating === r.value ? 'fa-solid' : 'fa-regular', r.icon]" aria-hidden="true" /><span class="sr-only">{{ r.label }}</span>
       </button>
+      <span v-if="turn.rating === -1 && turn.ratingTags?.length" class="text-[11.5px] muted">· {{ turn.ratingTags.join(', ') }}</span>
     </div>
+
+    <form v-if="canRate && badOpen" class="-mt-1 flex flex-col gap-2 rounded-xl border border-line bg-white p-3" @submit.prevent="sendBad">
+      <p class="m-0 text-[12.5px] font-semibold text-ink">¿Qué estuvo mal?</p>
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Motivos">
+        <button
+          v-for="tag in FEEDBACK_TAGS"
+          :key="tag"
+          type="button"
+          class="quick-action"
+          :class="{ active: badTags.includes(tag) }"
+          :aria-pressed="badTags.includes(tag)"
+          @click="toggleTag(tag)"
+        >
+          {{ tag }}
+        </button>
+      </div>
+      <textarea
+        v-model="badComment"
+        rows="2"
+        maxlength="2000"
+        class="w-full resize-y rounded-lg border border-line px-2 py-1.5 text-[13px] outline-none focus:border-brandlight"
+        placeholder="Comentario (opcional)"
+        aria-label="Comentario de la valoración"
+      />
+      <div class="flex justify-end gap-2">
+        <button type="button" class="btn py-1 text-[12.5px]" @click="badOpen = false">Cancelar</button>
+        <button type="submit" class="btn btn-primary py-1 text-[12.5px]" :disabled="sending">{{ sending ? 'Guardando…' : 'Enviar valoración' }}</button>
+      </div>
+    </form>
 
     <div v-if="turn.status === 'ok' && !IS_API" class="-mt-1 flex flex-wrap gap-1.5 pl-1" role="group" aria-label="Acciones con este resultado">
       <button v-for="a in QUICK_ACTIONS" :key="a.id" type="button" class="quick-action" @click="$emit('action', a.id)">
@@ -87,19 +118,51 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue';
 import { effortLabel } from '@/shared/models';
 import { IS_API } from '@/services/mode';
 import { CHART_TYPES } from '@/shared/resultView';
 import LiveProgress from './LiveProgress.vue';
 
-defineProps({
+const props = defineProps({
   turn: { type: Object, required: true },
   selected: Boolean,
   selectable: Boolean,
   compact: Boolean,
   rateable: Boolean,
 });
-defineEmits(['select', 'action', 'chart', 'rate']);
+const emit = defineEmits(['select', 'action', 'chart', 'rate']);
+
+// Mismos motivos que workflow-agent-api, para analizar juntas ambas valoraciones.
+const FEEDBACK_TAGS = ['Dato incorrecto', 'Tabla equivocada', 'Faltó contexto', 'Ambigua', 'Muy lenta', 'Otro'];
+const canRate = computed(() => props.rateable && props.turn.runId && props.turn.kind !== 'report'
+  && (props.turn.status === 'ok' || props.turn.status === 'max_iterations'));
+const badOpen = ref(false);
+const badTags = ref([]);
+const badComment = ref('');
+const sending = ref(false);
+
+/** 👍 se guarda al momento; 👎 abre el formulario de motivos. */
+function pick(rating) {
+  if (rating === 1) {
+    badOpen.value = false;
+    emit('rate', 1, {});
+    return;
+  }
+  badTags.value = [...(props.turn.ratingTags ?? [])];
+  badComment.value = props.turn.ratingComment ?? '';
+  badOpen.value = !badOpen.value;
+}
+function toggleTag(tag) {
+  badTags.value = badTags.value.includes(tag) ? badTags.value.filter((t) => t !== tag) : [...badTags.value, tag];
+}
+function sendBad() {
+  sending.value = true;
+  emit('rate', -1, { tags: badTags.value, comment: badComment.value.trim() || null, done: (ok) => {
+    sending.value = false;
+    if (ok) badOpen.value = false;
+  } });
+}
 
 const RATINGS = [
   { value: 1, label: 'Respuesta útil', icon: 'fa-thumbs-up', active: 'text-good' },

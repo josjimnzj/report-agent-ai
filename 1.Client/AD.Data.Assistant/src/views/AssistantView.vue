@@ -1,7 +1,7 @@
 <template>
   <!-- Escritorio (≥ 1200 px): menú, chat y resultados lado a lado. -->
   <main v-if="!compact" class="flex h-full gap-4 p-4">
-    <ChatSidebar @new-chat="newChat" @open-chat="openChat" @open-report="openReport" @edit-report="editReport" @report-action="openAction" />
+    <ChatSidebar @new-chat="newChat" @open-chat="openChat" @open-report="openReport" @edit-report="editReport" @report-action="openAction" @history="history = true" />
     <div class="shrink-0 transition-[width] duration-200" :class="prefs.chatExpanded ? 'w-[min(720px,50vw)]' : 'w-[360px]'">
       <ChatPanel @new-chat="newChat" @save="saving = true" @edit="editing = true" @report-action="openAction" />
     </div>
@@ -43,12 +43,13 @@
     </Transition>
     <Transition name="slide">
       <div v-if="drawerOpen" class="fixed inset-y-0 left-0 z-[1401] w-[min(320px,88vw)] p-2" role="dialog" aria-modal="true" aria-label="Conversaciones y reportes" @keydown.esc="drawerOpen = false">
-        <ChatSidebar drawer @close="drawerOpen = false" @new-chat="newChat" @open-chat="openChat" @open-report="openReport" @edit-report="editReport" @report-action="openAction" />
+        <ChatSidebar drawer @close="drawerOpen = false" @new-chat="newChat" @open-chat="openChat" @open-report="openReport" @edit-report="editReport" @report-action="openAction" @history="drawerOpen = false; history = true" />
       </div>
     </Transition>
   </main>
 
   <ReportActionDialog />
+  <HistoryDialog v-if="IS_API" :visible="history" @close="history = false" />
   <ChatDetailsDialog
     :visible="saving"
     title="Guardar chat"
@@ -82,6 +83,7 @@ import ChatPanel from '@/components/ChatPanel.vue';
 import ReportPanel from '@/components/ReportPanel.vue';
 import ChatDetailsDialog from '@/components/ChatDetailsDialog.vue';
 import ReportActionDialog from '@/components/ReportActionDialog.vue';
+import HistoryDialog from '@/components/HistoryDialog.vue';
 import { useActionsStore } from '@/stores/actions';
 import { useReportsStore } from '@/stores/reports';
 import { IS_API } from '@/services/mode';
@@ -98,6 +100,7 @@ const actions = useActionsStore();
 const reports = useReportsStore();
 const saving = ref(false);
 const editing = ref(false);
+const history = ref(false);
 
 // Por debajo de 1200 px no caben menú + chat + resultados: se pasa a una vista a la vez.
 const media = window.matchMedia('(max-width: 1199px)');

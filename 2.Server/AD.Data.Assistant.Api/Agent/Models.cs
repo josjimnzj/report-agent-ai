@@ -6,7 +6,8 @@ public sealed record QueryRequest(string? Question, string? ConversationId = nul
 
 public sealed record FeedbackRequest(string? RunId, int Rating, string[]? Tags = null, string? Comment = null);
 
-public sealed record ToolCallTrace(string Tool, long DurationMs, bool IsError);
+/// <summary>Una llamada a herramienta: entrada, duración y vista previa del resultado (para la pestaña Traza).</summary>
+public sealed record ToolCallTrace(string Tool, JsonElement Input, long DurationMs, bool IsError, string ResultPreview);
 
 public sealed record UsageInfo(long InputTokens, long OutputTokens, long CacheReadTokens, long CacheCreationTokens);
 

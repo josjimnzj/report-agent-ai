@@ -60,10 +60,19 @@ public sealed class AgentLoop(AnthropicClient client, IOptions<AnthropicOptions>
         string? servedBy = null;
         var iterations = 0;
         var watch = Stopwatch.StartNew();
+        // Parámetros de la solicitud, para el log del front y la telemetría.
+        await emit(new AgentEvent("request", new
+        {
+            provider = "anthropic", model = settings.Model, effort = settings.Effort, fallback = settings.Fallback,
+            thinking = "adaptive", showThinking = true, maxTokens = _opt.MaxTokens, maxIterations,
+            systemChars = systemPrompt.Length,
+            tools = tools.Select(t => t.TryPickBetaTool(out var bt) ? bt.Name : "?").ToArray(),
+        }));
 
         for (var iter = 0; iter < maxIterations; iter++)
         {
             iterations++;
+            await emit(new AgentEvent("status", new { message = $"Claude pensando (iteración {iter + 1})…" }));
             var turnWatch = Stopwatch.StartNew();
             var turn = await StreamTurnAsync(systemPrompt, messages, tools, jsonSchema, settings, emit, ct);
             await emit(new AgentEvent("turn_end", new
@@ -123,14 +132,16 @@ public sealed class AgentLoop(AnthropicClient client, IOptions<AnthropicOptions>
                 o = new ToolOutcome($"Error: {ex.Message}", true);
             }
             sw.Stop();
-            lock (trace) trace.Add(new ToolCallTrace(tc.Name, sw.ElapsedMilliseconds, o.IsError));
+            var preview = Preview(o.Content);
+            lock (trace) trace.Add(new ToolCallTrace(tc.Name, JsonSerializer.SerializeToElement(tc.Input), sw.ElapsedMilliseconds, o.IsError, preview));
             await emit(new AgentEvent("tool_result", new
             {
-                tool = tc.Name, durationMs = sw.ElapsedMilliseconds, isError = o.IsError,
-                preview = o.Content.Length <= 1500 ? o.Content : o.Content[..1500] + "… [truncado]",
+                tool = tc.Name, durationMs = sw.ElapsedMilliseconds, isError = o.IsError, result = preview,
             }));
             return o;
         }));
+
+    public static string Preview(string s) => s.Length <= 1500 ? s : s[..1500] + "… [truncado]";
 
     /// <summary>Una llamada a Messages en streaming; acumula los bloques y reenvía texto y razonamiento en vivo.</summary>
     private async Task<Turn> StreamTurnAsync(

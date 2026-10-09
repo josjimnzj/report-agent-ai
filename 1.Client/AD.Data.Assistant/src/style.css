@@ -59,3 +59,11 @@ button.tag-chip:focus-visible { outline: 2px solid theme('colors.brandlight'); o
 }
 .quick-action:hover { border-color: theme('colors.brandlight'); color: theme('colors.brandblue'); }
 .quick-action:focus-visible { outline: 2px solid theme('colors.brandlight'); outline-offset: 1px; }
+
+/* Bloques de log y traza: texto preformateado con scroll propio. */
+.log-pre {
+  margin: 0; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  border-radius: 6px; background: #f6f8fa; padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; color: theme('colors.ink.DEFAULT');
+}
+.quick-action.active { border-color: theme('colors.brandlight'); background: #e6f4fb; color: theme('colors.brandblue'); font-weight: 600; }

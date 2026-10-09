@@ -158,6 +158,19 @@
       </nav>
     </template>
 
+    <div v-if="IS_API" class="border-t border-line p-2" :class="collapsed ? 'flex justify-center' : ''">
+      <button
+        type="button"
+        class="flex cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2 py-2 text-[13.5px] text-ink-soft hover:bg-canvas hover:text-brandblue"
+        :class="collapsed ? 'h-9 w-9 justify-center p-0' : 'w-full'"
+        title="Historial y métricas"
+        @click="$emit('history')"
+      >
+        <i class="fa-solid fa-chart-simple w-4 text-center" aria-hidden="true" />
+        <span :class="collapsed ? 'sr-only' : ''">Historial y métricas</span>
+      </button>
+    </div>
+
     <PromptDialog
       :visible="renamingReport !== null"
       title="Renombrar reporte"
@@ -201,7 +214,7 @@ const props = defineProps({
   // Dentro del cajón móvil: siempre expandido y con botón de cerrar.
   drawer: Boolean,
 });
-const emit = defineEmits(['open-chat', 'new-chat', 'open-report', 'close', 'edit-report', 'report-action']);
+const emit = defineEmits(['open-chat', 'new-chat', 'open-report', 'close', 'edit-report', 'report-action', 'history']);
 
 const LIMIT = 7;
 const KIND = {
