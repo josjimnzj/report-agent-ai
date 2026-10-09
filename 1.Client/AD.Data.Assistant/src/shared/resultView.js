@@ -181,11 +181,13 @@ export function chartSpec(columns, rows, hint, choice) {
  * @returns {{ table: boolean, suggestion: object|null, chart: object|null }}
  */
 export function resultDisplay(result) {
-  if (!result) return { table: false, suggestion: null, chart: null };
+  if (!result) return { table: false, explicit: false, suggestion: null, chart: null };
   const suggestion = chartSpec(result.columns, result.rows, result.chart, {});
   const table = !suggestion || result.chartType === TABLE_TYPE || (!result.chartType && result.showChart === false);
   const choice = { type: result.chartType ?? undefined, lines: result.chartLines ?? undefined, avg: result.chartAvg ?? undefined };
-  return { table, suggestion, chart: table ? null : chartSpec(result.columns, result.rows, result.chart, choice) };
+  // «Solo tabla» elegido o pedido: no se insiste con la propuesta de gráfica.
+  const explicit = result.chartType === TABLE_TYPE;
+  return { table, explicit, suggestion, chart: table ? null : chartSpec(result.columns, result.rows, result.chart, choice) };
 }
 
 /** Filas para la gráfica: pastel/dona con «Otros» a partir de MAX_PIE categorías y barras con tope MAX_BAR. */
@@ -207,11 +209,18 @@ export function chartData(spec, columns, rows) {
   return { data, truncated: false };
 }
 
+/** Tipos de insight del agente (hallazgo, alerta, recomendación). */
+export const INSIGHT_KINDS = {
+  finding: { label: 'Hallazgo', icon: 'fa-magnifying-glass-chart', tone: 'text-brandlight' },
+  alert: { label: 'Alerta', icon: 'fa-triangle-exclamation', tone: 'text-[#b45309]' },
+  recommendation: { label: 'Recomendación', icon: 'fa-lightbulb', tone: 'text-good' },
+};
+
 /** Filas como objetos para DevExtreme (dxChart / dxDataGrid). */
 export const rowsAsObjects = (columns, rows) =>
   rows.map((r, n) => Object.fromEntries([['__row', n], ...columns.map((c, i) => [c, r[i]])]));
 
-export function genericMarkdown({ title, answer, columns, rows, totalRows, queries = [] }) {
+export function genericMarkdown({ title, answer, columns, rows, totalRows, queries = [], insights = [] }) {
   const esc = (v) => String(v).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [`# ${title}`, ''];
   if (answer) lines.push(answer, '');
@@ -220,6 +229,10 @@ export function genericMarkdown({ title, answer, columns, rows, totalRows, queri
     for (const r of rows.slice(0, 200)) lines.push(`| ${r.map((v, i) => esc(formatValue(v, columns[i]))).join(' | ')} |`);
     const total = totalRows ?? rows.length;
     if (total > Math.min(rows.length, 200)) lines.push('', `_Se muestran ${Math.min(rows.length, 200)} de ${total} filas._`);
+  }
+  if (insights.length) {
+    lines.push('', '## Insights y recomendaciones', '');
+    for (const i of insights) lines.push(`- **${INSIGHT_KINDS[i.kind]?.label ?? 'Hallazgo'} · ${i.title}:** ${i.text}`);
   }
   if (queries.length) {
     lines.push('', '## SQL', '');

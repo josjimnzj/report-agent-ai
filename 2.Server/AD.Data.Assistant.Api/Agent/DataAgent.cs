@@ -70,11 +70,25 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
           "required": ["type", "x", "y", "series", "refLines"],
           "additionalProperties": false
         },
-        "showChart": { "type": "boolean" },
+        "display": { "type": "string", "enum": ["chart", "table_first", "table_only"] },
+        "reusePrevious": { "type": "boolean" },
         "askChart": { "type": "boolean" },
-        "openReport": { "type": "boolean" }
+        "openReport": { "type": "boolean" },
+        "insights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "enum": ["finding", "alert", "recommendation"] },
+              "title": { "type": "string" },
+              "text": { "type": "string" }
+            },
+            "required": ["kind", "title", "text"],
+            "additionalProperties": false
+          }
+        }
       },
-      "required": ["answer", "resultQuery", "chart", "showChart", "askChart", "openReport"],
+      "required": ["answer", "resultQuery", "chart", "display", "reusePrevious", "askChart", "openReport", "insights"],
       "additionalProperties": false
     }
     """).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
@@ -120,7 +134,7 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
             }
             else
             {
-                var parts = ParseAnswer(run.FinalText);
+                var parts = ApplyDisplayRules(ParseAnswer(run.FinalText), question);
                 var main = parts.ResultQuery >= 1 && parts.ResultQuery <= results.Count ? results[parts.ResultQuery - 1] : null;
                 response = Build(conversationId, runId, "ok", run, settings, sw.ElapsedMilliseconds, parts.Answer, main, results, parts.Chart, parts);
             }
@@ -144,7 +158,18 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         new(conversationId, status, run.Iterations, answer,
             main?.Columns ?? [], main?.Rows ?? [], results.Select(r => r.Sql).ToList(), run.Trace, run.Usage, ms,
             runId, settings.Model, settings.Effort, run.ServedBy, chart, main?.RowCount ?? 0,
-            AskChart: parts?.AskChart ?? false, OpenReport: parts?.OpenReport ?? false, ShowChart: parts?.ShowChart ?? true);
+            AskChart: parts?.AskChart ?? false, OpenReport: parts?.OpenReport ?? false, ShowChart: parts?.ShowChart ?? true,
+            Display: parts?.Display ?? "chart", ReusePrevious: parts?.ReusePrevious ?? false, Insights: parts?.Insights ?? []);
+
+    /// <summary>«Solo tabla», «sin gráfica», «datos en crudo»…: el usuario lo dijo, así que manda sobre lo que decida el modelo.</summary>
+    private static readonly System.Text.RegularExpressions.Regex TableOnlyRequest = new(
+        @"\b(s[oó]lo|[uú]nicamente)\s+(en\s+)?(la\s+|una\s+)?tabla\b|\bsin\s+(la\s+|una\s+|ninguna\s+)?gr[aá]fic|\b(en|como)\s+(una\s+)?tabla\b|\bdatos\s+en\s+crudo\b|\bformato\s+tabular\b|\bno\s+(quiero|me\s+(muestres|pongas|hagas))\s+(la\s+|una\s+|ninguna\s+)?gr[aá]fic",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    internal static AnswerParts ApplyDisplayRules(AnswerParts parts, string question) =>
+        TableOnlyRequest.IsMatch(question)
+            ? parts with { Display = "table_only", ShowChart = false, AskChart = false }
+            : parts;
 
     private static readonly string? Commit = (Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? Environment.GetEnvironmentVariable("GIT_COMMIT")) is { Length: >= 7 } c ? c[..7] : null;
 
@@ -239,9 +264,17 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
             }
             bool Flag(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
             static string Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
-            // Sin el campo (respuesta antigua o modelo que no lo respetó) se muestra la gráfica, como antes.
-            var showChart = !root.TryGetProperty("showChart", out var sc) || sc.ValueKind != JsonValueKind.False;
-            return new(answer, index, chart, Flag("askChart"), Flag("openReport"), showChart);
+            // display manda; sin él (respuesta antigua) se usa showChart y, si tampoco está, la gráfica, como antes.
+            var d = Str(root, "display");
+            var display = d is "chart" or "table_first" or "table_only" ? d
+                : root.TryGetProperty("showChart", out var sc) && sc.ValueKind == JsonValueKind.False ? "table_first" : "chart";
+            List<Insight> insights = root.TryGetProperty("insights", out var ie) && ie.ValueKind == JsonValueKind.Array
+                ? ie.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object)
+                    .Select(e => new Insight(Str(e, "kind") is "alert" or "recommendation" ? Str(e, "kind") : "finding", Str(e, "title"), Str(e, "text")))
+                    .Where(x => x.Text.Length > 0).Take(6).ToList()
+                : [];
+            return new(answer, index, chart, Flag("askChart") && display == "chart", Flag("openReport"), display == "chart",
+                display, Flag("reusePrevious"), insights);
         }
         catch (JsonException) { return new(t, 0, null, false, false, true); }
     }
@@ -256,7 +289,11 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
 
     private async Task SaveTurnAsync(ConversationDoc conv, string model, string question, QueryResponse r, CancellationToken ct)
     {
-        var turn = new ConversationTurn(question, r.Answer, r.Queries, r.Columns, r.Rows.Take(HistorySampleRows).ToList(), time.GetUtcNow(), r.Chart);
+        // Si solo cambió cómo se ve el resultado anterior, el historial conserva sus datos para los siguientes seguimientos.
+        var prev = r.ReusePrevious && r.Columns.Count == 0 ? conv.Turns.LastOrDefault() : null;
+        var turn = prev is null
+            ? new ConversationTurn(question, r.Answer, r.Queries, r.Columns, r.Rows.Take(HistorySampleRows).ToList(), time.GetUtcNow(), r.Chart)
+            : new ConversationTurn(question, r.Answer, prev.Queries, prev.Columns, prev.SampleRows, time.GetUtcNow(), r.Chart ?? prev.Chart);
         var turns = conv.Turns.Append(turn).TakeLast(HistoryTurns * 2).ToList();
         var updated = conv with { Model = model, Turns = turns, UpdatedAt = time.GetUtcNow() };
         await store.PutAsync(Collections.Conversations, conv.Id, JsonSerializer.SerializeToElement(updated, Json), ct);

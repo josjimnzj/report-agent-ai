@@ -31,12 +31,21 @@ public sealed record QueryResponse(
     long TotalRows,
     bool AskChart = false,
     bool OpenReport = false,
-    bool ShowChart = true);
+    bool ShowChart = true,
+    string Display = "chart",
+    bool ReusePrevious = false,
+    IReadOnlyList<Insight>? Insights = null);
+
+/// <summary>Hallazgo, alerta o recomendación sobre el resultado (pestaña Insights del reporte).</summary>
+public sealed record Insight(string Kind, string Title, string Text);
 
 /// <param name="AskChart">El agente no tuvo claro qué gráfica quiere el usuario y se lo pregunta en la respuesta.</param>
 /// <param name="OpenReport">El usuario pidió ver el resultado en el reporte.</param>
-/// <param name="ShowChart">El usuario pidió una gráfica; si no, el reporte muestra primero los datos en tabla y `Chart` es solo la sugerencia.</param>
-public sealed record AnswerParts(string Answer, int ResultQuery, ChartHint? Chart, bool AskChart, bool OpenReport, bool ShowChart = true);
+/// <param name="ShowChart">Se dibuja la gráfica (Display = "chart"); si no, el reporte muestra los datos en tabla y `Chart` es solo la sugerencia.</param>
+/// <param name="Display">"chart" (gráfica pedida), "table_first" (tabla y se ofrece gráfica) o "table_only" (el usuario pidió solo tabla).</param>
+/// <param name="ReusePrevious">Solo cambia cómo se ve el resultado anterior: no hay consulta nueva y el front reutiliza esos datos.</param>
+public sealed record AnswerParts(string Answer, int ResultQuery, ChartHint? Chart, bool AskChart, bool OpenReport, bool ShowChart = true,
+    string Display = "chart", bool ReusePrevious = false, IReadOnlyList<Insight>? Insights = null);
 
 /// <summary>Gráfica sugerida por el agente para el resultado principal (tipos de DevExtreme dxChart / dxPieChart).</summary>
 /// <param name="Series">Tipo y eje por columna, para mezclar (barras + línea, eje derecho para otra magnitud).</param>

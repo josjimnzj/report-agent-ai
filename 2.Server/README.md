@@ -88,10 +88,13 @@ El agente marca sus ejecuciones con `mode = "query"`; si la base se comparte con
 
 ## Gráficas y reporte
 
-La respuesta final del agente incluye `chart`, `showChart`, `askChart` y `openReport`:
+La respuesta final del agente incluye `chart`, `display`, `reusePrevious`, `askChart`, `openReport` e `insights`:
 
-- **Sin gráfica pedida** (`showChart: false`): Resultados muestra primero los **datos en crudo** en tabla y el agente pregunta si se lleva a una gráfica; `chart` es su sugerencia. Un clic en «Ver en …», en los atajos bajo la respuesta o en el selector la dibuja sin volver a consultar.
-- **Gráfica pedida** (`showChart: true`): la dibuja directamente solo si está 100 % seguro del tipo; si no, la propone y pregunta (`askChart: true`).
+- `display: "table_first"` (por defecto, sin gráfica pedida): Resultados muestra primero los **datos en crudo** en tabla y el agente pregunta si se lleva a una gráfica; `chart` es su sugerencia. Un clic en «Ver en …», en los atajos bajo la respuesta o en el selector la dibuja sin volver a consultar.
+- `display: "table_only"`: el usuario pidió solo tabla; no se insiste con gráficas (el selector sigue disponible). **Regla del servidor:** si la pregunta dice «solo tabla», «sin gráfica», «en tabla», «datos en crudo» o «no quiero gráfica», se fuerza `table_only` aunque el modelo diga otra cosa.
+- `display: "chart"`: gráfica pedida; se dibuja directo solo si el agente está 100 % seguro del tipo; si no, la propone y pregunta (`askChart`).
+- `reusePrevious`: el usuario solo cambió cómo se ve el resultado anterior (solo tabla, otra gráfica, líneas); el agente no vuelve a consultar y el front reutiliza los datos, el SQL y los insights del turno anterior.
+- `insights`: 2 a 4 hallazgos (`finding`), alertas (`alert`) y recomendaciones (`recommendation`) con cifras de los datos. Se muestran en Resultados («Insights y recomendaciones») y en la pestaña Insights, se guardan con el reporte y van en el Markdown.
 - `openReport`: el usuario pidió verlo en el reporte; el front abre Resultados.
 - El selector de tipo incluye «Solo tabla (sin gráfica)» para volver a los datos.
 

@@ -168,7 +168,7 @@ function sendBad() {
 }
 
 // Sin gráfica pedida se ofrece llevar la tabla a gráfica, con la sugerida del agente primero.
-const suggested = computed(() => (props.turn.showChart === false ? props.turn.view?.chart?.type : null));
+const suggested = computed(() => (props.turn.showChart === false && props.turn.display !== 'table_only' ? props.turn.view?.chart?.type : null));
 const quickCharts = computed(() => {
   const ids = suggested.value && CHART_TYPES.some((t) => t.id === suggested.value)
     ? [suggested.value, ...QUICK_CHART_TYPES.filter((id) => id !== suggested.value)]
@@ -180,6 +180,8 @@ const quickCharts = computed(() => {
 });
 const chartPrompt = computed(() => {
   if (props.turn.status !== 'ok' || !props.turn.columns?.length) return '';
+  // «Solo tabla» pedido: no se insiste con gráficas.
+  if (props.turn.display === 'table_only' || props.turn.view?.chartType === 'table') return '';
   if (props.turn.showChart === false && props.turn.view?.chart) return '¿Lo llevamos a una gráfica?';
   return props.turn.askChart ? '¿Cómo quieres la gráfica?' : '';
 });

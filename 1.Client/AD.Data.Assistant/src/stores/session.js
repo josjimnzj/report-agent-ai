@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { streamQuery } from '@/services/dataAgentApi';
 import { sendFeedback } from '@/services/telemetryApi';
 import { capLog, capture } from '@/shared/runLog';
+import { turnFromDone } from '@/shared/turnResult';
 import { newId } from '@/shared/ids';
 import { $notify } from '@/shared/notify';
 import { normalizeTags } from '@/shared/tags';
@@ -47,7 +48,7 @@ export const useSessionStore = defineStore('session', {
       const t = this.selectedTurn;
       return t ? {
         id: t.id, title: null, question: t.question, answer: t.answer, chart: t.view?.chart ?? null,
-        chartType: t.view?.chartType ?? null, chartLines: t.view?.chartLines ?? null, chartAvg: t.view?.chartAvg ?? null, askChart: Boolean(t.askChart), showChart: t.showChart !== false, turnId: t.kind === 'report' ? null : t.id,
+        chartType: t.view?.chartType ?? null, chartLines: t.view?.chartLines ?? null, chartAvg: t.view?.chartAvg ?? null, askChart: Boolean(t.askChart), showChart: t.showChart !== false, display: t.display ?? null, insights: t.insights ?? [], turnId: t.kind === 'report' ? null : t.id,
         branches: t.view?.branches ?? null, columns: t.columns, rows: t.rows,
         queries: t.queries, totalRows: t.totalRows ?? t.rows.length, truncated: Boolean(t.truncated),
       } : null;
@@ -99,7 +100,7 @@ export const useSessionStore = defineStore('session', {
         return {
           id: report.id, title: report.title, months: report.months ?? 6, branches: report.branches ?? null,
           columns: report.result.columns, rows: report.result.rows, queries: report.result.queries,
-          answer: report.result.answer, chart: report.result.chart, chartType: report.result.chartType ?? null, chartLines: report.result.chartLines ?? null, chartAvg: report.result.chartAvg ?? null,
+          answer: report.result.answer, chart: report.result.chart, insights: report.result.insights ?? [], chartType: report.result.chartType ?? null, chartLines: report.result.chartLines ?? null, chartAvg: report.result.chartAvg ?? null,
           totalRows: report.result.totalRows, reportId: report.id,
         };
       }
@@ -219,12 +220,10 @@ export const useSessionStore = defineStore('session', {
             },
           },
         );
-        Object.assign(live, {
-          status: done.status, answer: done.answer, columns: done.columns, rows: done.rows, totalRows: done.totalRows ?? done.rows?.length,
-          queries: done.queries, view: done.view, elapsedMs: done.elapsedMs, runId: done.runId, answeredAt: Date.now(),
-          servedBy: done.servedBy ?? null, askChart: Boolean(done.askChart), openReport: Boolean(done.openReport), rating: null,
-          // Sin gráfica pedida, Resultados muestra primero los datos en tabla (el agente deja su sugerencia en chart).
-          showChart: done.showChart !== false,
+        // Datos, gráfica y modo de vista; «solo tabla» u otra gráfica sobre el resultado anterior reutilizan sus datos.
+        const previous = this.turnsWithData.filter((t) => t.id !== live.id).at(-1) ?? null;
+        Object.assign(live, turnFromDone(done, previous), {
+          elapsedMs: done.elapsedMs, runId: done.runId, answeredAt: Date.now(), servedBy: done.servedBy ?? null, rating: null,
           toolCalls: Array.isArray(done.toolCalls) ? done.toolCalls : [], usage: done.usage ?? null, iterations: done.iterations ?? null,
         });
         this.chat.conversationId = done.conversationId;

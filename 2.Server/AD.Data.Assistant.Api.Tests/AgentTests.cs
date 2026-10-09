@@ -36,7 +36,8 @@ public class AgentTests
     [Fact]
     public void ParseAnswer_lee_respuesta_consulta_principal_y_grafica()
     {
-        var (answer, index, chart, askChart, openReport, showChart) = DataAgent.ParseAnswer("""{"answer":"Centro lidera.","resultQuery":2,"chart":{"type":"bar","x":"Sucursal","y":["Monto"]},"askChart":false,"openReport":true}""");
+        var first = DataAgent.ParseAnswer("""{"answer":"Centro lidera.","resultQuery":2,"chart":{"type":"bar","x":"Sucursal","y":["Monto"]},"askChart":false,"openReport":true}""");
+        var (answer, index, chart, askChart, openReport, showChart) = (first.Answer, first.ResultQuery, first.Chart, first.AskChart, first.OpenReport, first.ShowChart);
         Assert.Equal("Centro lidera.", answer);
         Assert.Equal(2, index);
         Assert.Equal(new ChartHint("bar", "Sucursal", ["Monto"]).Type, chart!.Type);
@@ -48,6 +49,14 @@ public class AgentTests
         var tableFirst = DataAgent.ParseAnswer("""{"answer":"Aquí están los datos. ¿Lo llevamos a barras?","resultQuery":1,"chart":{"type":"bar","x":"A","y":["B"],"series":[],"refLines":[]},"showChart":false,"askChart":false,"openReport":false}""");
         Assert.False(tableFirst.ShowChart);
         Assert.Equal("bar", tableFirst.Chart!.Type); // la sugerencia se conserva
+        Assert.Equal("table_first", tableFirst.Display);
+
+        var only = DataAgent.ParseAnswer("""{"answer":"Listo.","resultQuery":0,"chart":{"type":"bar","x":"A","y":["B"],"series":[],"refLines":[]},"display":"table_only","reusePrevious":true,"askChart":true,"openReport":false,"insights":[{"kind":"alert","title":"Caída","text":"Julio bajó 4 %."},{"kind":"otro","title":"x","text":"y"},{"kind":"recommendation","title":"vacía","text":""}]}""");
+        Assert.Equal("table_only", only.Display);
+        Assert.False(only.ShowChart);
+        Assert.False(only.AskChart); // no se pregunta por gráfica si no se muestra
+        Assert.True(only.ReusePrevious);
+        Assert.Equal(["alert", "finding"], only.Insights!.Select(i => i.Kind));
 
         var combo = DataAgent.ParseAnswer("""{"answer":"x","resultQuery":1,"chart":{"type":"bar","x":"Mes","y":["Ventas","Monto"],"series":[{"column":"Monto","type":"line","axis":"right"}],"refLines":[{"kind":"average","column":"Ventas","value":null,"label":"Promedio"},{"kind":"value","column":"Ventas","value":500,"label":"Meta"}]},"askChart":false,"openReport":false}""");
         Assert.Equal("line", combo.Chart!.Series![0].Type);
@@ -66,6 +75,24 @@ public class AgentTests
         var plain = DataAgent.ParseAnswer("Texto libre sin JSON");
         Assert.Equal("Texto libre sin JSON", plain.Answer);
         Assert.Equal(0, plain.ResultQuery);
+    }
+
+    [Theory]
+    [InlineData("Ahora solo tabla", true)]
+    [InlineData("muéstralo sólo en tabla por favor", true)]
+    [InlineData("Ventas por sucursal sin gráfica", true)]
+    [InlineData("dámelo como tabla", true)]
+    [InlineData("quiero los datos en crudo", true)]
+    [InlineData("no quiero gráfica", true)]
+    [InlineData("Ventas por mes en barras", false)]
+    [InlineData("¿Qué tabla usaste para las ventas?", false)]
+    public void Solo_tabla_manda_sobre_el_modelo(string question, bool tableOnly)
+    {
+        var parts = new AnswerParts("a", 1, new ChartHint("bar", "A", ["B"]), true, false, true, "chart");
+        var r = DataAgent.ApplyDisplayRules(parts, question);
+        Assert.Equal(tableOnly ? "table_only" : "chart", r.Display);
+        Assert.Equal(!tableOnly, r.ShowChart);
+        if (tableOnly) Assert.False(r.AskChart);
     }
 
     [Fact]

@@ -96,7 +96,7 @@
           </article>
           <!-- Sin gráfica pedida: primero los datos en crudo y la propuesta de llevarlos a gráfica. -->
           <template v-if="display.table">
-            <article v-if="display.suggestion" class="no-print card flex flex-wrap items-center gap-3 border-brandlight bg-[#f2f9fd] p-4">
+            <article v-if="display.suggestion && !display.explicit" class="no-print card flex flex-wrap items-center gap-3 border-brandlight bg-[#f2f9fd] p-4">
               <i class="fa-solid fa-chart-column text-[18px] text-brandlight" aria-hidden="true" />
               <p class="m-0 min-w-[200px] flex-1 text-[13.5px] text-ink">
                 ¿Lo llevamos a una gráfica? Sugerencia: <b>{{ chartTypeLabel(display.suggestion.type) }}</b>{{ suggestionTitle ? ` · ${suggestionTitle}` : '' }}.
@@ -107,7 +107,11 @@
               <ChartPicker :spec="display.suggestion" :value="TABLE_TYPE" allow-table type-only :compact="narrow" @change="(c) => c.type && c.type !== TABLE_TYPE && session.setChartChoice(c)" />
             </article>
             <article class="card min-w-0 p-4">
-              <h3 class="section-title mb-3">Datos</h3>
+              <div class="mb-3 flex flex-wrap items-start gap-2">
+                <h3 class="section-title m-0 flex-1 pt-1.5">Datos</h3>
+                <!-- «Solo tabla»: la gráfica queda a un clic, sin la propuesta destacada. -->
+                <ChartPicker v-if="display.explicit && display.suggestion" class="no-print" :spec="display.suggestion" :value="TABLE_TYPE" allow-table type-only :compact="narrow" @change="(c) => c.type && c.type !== TABLE_TYPE && session.setChartChoice(c)" />
+              </div>
               <ResultGrid :columns="result.columns" :rows="result.rows" :total-rows="result.totalRows" :truncated="result.truncated" />
             </article>
           </template>
@@ -120,6 +124,12 @@
               <i class="fa-solid fa-circle-question mr-1 text-brandlight" aria-hidden="true" /> El asistente propuso esta gráfica; elige otro tipo si lo prefieres.
             </p>
             <GenericChart :spec="chart" :columns="result.columns" :rows="result.rows" />
+          </article>
+          <article v-if="genericInsights.length" class="card p-5">
+            <h3 class="section-title mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-lightbulb text-brandlight" aria-hidden="true" /> Insights y recomendaciones
+            </h3>
+            <InsightsList :insights="genericInsights" :columns="wider ? 2 : 1" />
           </article>
         </div>
         <div v-else-if="tab === 'results'" id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="flex flex-col gap-4">
@@ -174,7 +184,7 @@
         </div>
 
         <div v-else id="panel-insights" role="tabpanel" aria-labelledby="tab-insights">
-          <InsightsList :insights="insights" :columns="wide ? 2 : 1" cards />
+          <InsightsList :insights="sales ? insights : genericInsights" :columns="wide ? 2 : 1" cards />
         </div>
       </div>
     </template>
@@ -278,7 +288,7 @@ function actionContext() {
 const sales = computed(() => Boolean(result.value) && isSalesResult(result.value.columns));
 // Traza y Log son de una respuesta del chat (no de un reporte guardado abierto).
 const turn = computed(() => (result.value?.turnId ? session.chat.turns.find((t) => t.id === result.value.turnId) ?? null : null));
-const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value) && ((t.id !== 'trace' && t.id !== 'log') || turn.value)));
+const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value || genericInsights.value.length) && ((t.id !== 'trace' && t.id !== 'log') || turn.value)));
 /** Tabla primero (sin gráfica pedida o «Solo tabla») o gráfica; con la sugerencia del agente para llevarla a gráfica. */
 const display = computed(() => (result.value && !sales.value ? resultDisplay(result.value) : { table: false, suggestion: null, chart: null }));
 const chart = computed(() => display.value.chart);
@@ -296,6 +306,8 @@ const report = computed(() => (sales.value
   ? buildReport(result.value.columns, result.value.rows, { months: prefs.months, branches: result.value.branches })
   : null));
 const insights = computed(() => (report.value ? buildInsights(report.value) : []));
+// Hallazgos, alertas y recomendaciones del agente para resultados genéricos.
+const genericInsights = computed(() => (!sales.value && Array.isArray(result.value?.insights) ? result.value.insights : []));
 
 const shorten = (s, n = 90) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const title = computed(() => session.reportTitle ?? result.value?.title
