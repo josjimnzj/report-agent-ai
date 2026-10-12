@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { capLog, capture, conversationLogText, entryText, fullReportText, MAX_ENTRY_CHARS, traceText, turnFromRun } from '../src/shared/runLog.js';
+import { capLog, capture, conversationLogText, entryText, entryView, fullReportText, MAX_ENTRY_CHARS, traceText, turnFromRun } from '../src/shared/runLog.js';
 
 test('capture fusiona deltas por bloque y registra herramientas, fases y fin', () => {
   const log = [];
@@ -60,4 +60,17 @@ test('turnFromRun convierte una ejecución guardada en la telemetría', () => {
   assert.equal(turn.usage.inputTokens, 3);
   assert.deepEqual(turn.log.map((e) => e.k), ['request', 'think', 'tool_result', 'status']);
   assert.equal(turn.toolCalls.length, 1);
+});
+
+test('entryView muestra el log como el visor: herramientas desplegables, iteraciones y fin', () => {
+  assert.deepEqual(entryView({ k: 'tool_call', tool: 'schema_search', input: { query: 'ventas' } }),
+    { label: '⚙ schema_search (entrada)', detail: '', tone: '', body: JSON.stringify({ query: 'ventas' }, null, 2), open: false });
+  const ok = entryView({ k: 'tool_result', tool: 'execute_query', ms: 812, isError: false, result: '{"rowCount":4}' });
+  assert.equal(ok.label, '✔ execute_query (812 ms)');
+  assert.equal(ok.tone, 'ok');
+  assert.equal(entryView({ k: 'tool_result', tool: 'x', ms: 1, isError: true, result: 'falló' }).label, '✖ x (1 ms)');
+  assert.equal(entryView({ k: 'turn_end', iteration: 1, stopReason: 'tool_use', inputTokens: 9000, outputTokens: 300, cacheReadTokens: 6000, cacheCreationTokens: 3100, ms: 3200 }).detail,
+    'fin iteración 1: stop=tool_use · tokens 9000/300 (caché leída 6000, creada 3100) · 3200 ms');
+  assert.deepEqual(entryView({ k: 'done', ms: 14230 }), { label: 'completado', detail: '· 14230 ms', tone: 'ok', body: null, open: false });
+  assert.equal(entryView({ k: 'think', text: 'Pienso' }).open, true);
 });

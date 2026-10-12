@@ -176,6 +176,10 @@
           <SqlPanel :queries="result.queries" />
         </div>
 
+        <div v-else-if="tab === 'json' && turn" id="panel-json" role="tabpanel" aria-labelledby="tab-json">
+          <JsonPanel :turn="turn" />
+        </div>
+
         <div v-else-if="tab === 'trace' && turn" id="panel-trace" role="tabpanel" aria-labelledby="tab-trace">
           <TracePanel :turn="turn" />
         </div>
@@ -227,6 +231,7 @@ import KebabMenu from './KebabMenu.vue';
 import GenericChart from './GenericChart.vue';
 import TracePanel from './TracePanel.vue';
 import LogPanel from './LogPanel.vue';
+import JsonPanel from './JsonPanel.vue';
 import { DEFAULT_REPORT_TITLE } from '@/mocks/salesByBranch';
 import { IS_API } from '@/services/mode';
 import { TABLE_TYPE, chartTypeLabel, genericMarkdown, isSalesResult, resultDisplay } from '@/shared/resultView';
@@ -238,6 +243,7 @@ const TABS = [
   { id: 'table', label: 'Tabla', icon: 'fa-table' },
   { id: 'sql', label: 'SQL', icon: 'fa-code' },
   { id: 'insights', label: 'Insights', icon: 'fa-lightbulb' },
+  { id: 'json', label: 'JSON', icon: 'fa-file-code' },
   { id: 'trace', label: 'Traza', icon: 'fa-route' },
   { id: 'log', label: 'Log', icon: 'fa-terminal' },
 ];
@@ -290,7 +296,7 @@ function actionContext() {
 const sales = computed(() => Boolean(result.value) && isSalesResult(result.value.columns));
 // Traza y Log son de una respuesta del chat (no de un reporte guardado abierto).
 const turn = computed(() => (result.value?.turnId ? session.chat.turns.find((t) => t.id === result.value.turnId) ?? null : null));
-const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value || genericInsights.value.length) && ((t.id !== 'trace' && t.id !== 'log') || turn.value)));
+const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value || genericInsights.value.length) && ((t.id !== 'trace' && t.id !== 'log' && t.id !== 'json') || turn.value)));
 /** Tabla primero (sin gráfica pedida o «Solo tabla») o gráfica; con la sugerencia del agente para llevarla a gráfica. */
 const display = computed(() => (result.value && !sales.value ? resultDisplay(result.value) : { table: false, suggestion: null, chart: null }));
 const chart = computed(() => display.value.chart);

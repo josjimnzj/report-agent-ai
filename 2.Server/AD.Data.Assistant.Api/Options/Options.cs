@@ -79,3 +79,13 @@ public sealed class TelemetryOptions
     public int RowSample { get; set; } = 20;
     public bool Enabled => !string.IsNullOrWhiteSpace(ConnectionString);
 }
+
+/// <summary>Dictado por voz con Whisper en Groq. Variable: Transcription__GroqApiKey. Sin clave, solo queda el dictado del navegador.</summary>
+public sealed class TranscriptionOptions
+{
+    /// <summary>Clave de Groq (capa gratuita con límites, console.groq.com).</summary>
+    public string? GroqApiKey { get; set; }
+    public string GroqBaseUrl { get; set; } = "https://api.groq.com/openai/v1";
+    public string GroqModel { get; set; } = "whisper-large-v3-turbo";
+    public long MaxBytes { get; set; } = 10 * 1024 * 1024;
+}

@@ -16,58 +16,62 @@
       </p>
 
       <template v-else>
-        <form class="grid gap-2" :class="size.width < 700 ? 'grid-cols-2' : 'grid-cols-[repeat(5,minmax(0,1fr))]'" aria-label="Filtros" @submit.prevent="load(true)">
-          <DxSelectBox v-model:value="filters.days" :items="DAYS" value-expr="value" display-expr="text" label="Periodo" label-mode="floating" @value-changed="load(true)" />
-          <DxSelectBox v-model:value="filters.rating" :items="RATINGS" value-expr="value" display-expr="text" label="Valoración" label-mode="floating" @value-changed="load(true)" />
-          <DxSelectBox v-model:value="filters.model" :items="modelItems" value-expr="value" display-expr="text" label="Modelo" label-mode="floating" @value-changed="load(true)" />
-          <DxSelectBox v-model:value="filters.mode" :items="MODES" value-expr="value" display-expr="text" label="Modo" label-mode="floating" @value-changed="load(true)" />
-          <DxSelectBox v-model:value="filters.status" :items="statusItems" value-expr="value" display-expr="text" label="Estado" label-mode="floating" @value-changed="load(true)" />
-          <div class="col-span-full flex flex-wrap items-center gap-2">
-            <div class="min-w-[220px] flex-1">
-              <DxTextBox
-                v-model:value="filters.q"
-                mode="search"
-                placeholder="Buscar en pregunta, respuesta o comentario…"
-                :input-attr="{ 'aria-label': 'Buscar en el historial' }"
-                @enter-key="load(true)"
-              />
-            </div>
-            <button type="submit" class="btn"><i class="fa-solid fa-filter" aria-hidden="true" /> Aplicar</button>
-            <button type="button" class="btn" title="Excel / Google Sheets" :disabled="exporting" @click="download('csv')">
-              <i class="fa-solid fa-file-csv" aria-hidden="true" /> Exportar CSV
-            </button>
-            <button type="button" class="btn" title="Incluye filas de muestra, eventos y traza" :disabled="exporting" @click="download('json')">
-              <i class="fa-solid fa-file-code" aria-hidden="true" /> Exportar JSON completo
-            </button>
-          </div>
+        <form class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13.5px] text-ink-soft" aria-label="Filtros" @submit.prevent="load(true)">
+          <label class="flex items-center gap-1.5">Periodo
+            <select v-model="filters.days" class="hist-select" @change="load(true)"><option v-for="o in DAYS" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+          </label>
+          <label class="flex items-center gap-1.5">Valoración
+            <select v-model="filters.rating" class="hist-select" @change="load(true)"><option v-for="o in RATINGS" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+          </label>
+          <label class="flex items-center gap-1.5">Modelo
+            <select v-model="filters.model" class="hist-select min-w-[150px]" @change="load(true)"><option v-for="o in modelItems" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+          </label>
+          <label class="flex items-center gap-1.5">Modo
+            <select v-model="filters.mode" class="hist-select" @change="load(true)"><option v-for="o in MODES" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+          </label>
+          <label class="flex items-center gap-1.5">Estado
+            <select v-model="filters.status" class="hist-select" @change="load(true)"><option v-for="o in statusItems" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+          </label>
+          <input
+            v-model="filters.q"
+            type="search"
+            class="hist-select min-w-[220px] flex-1"
+            placeholder="Buscar en pregunta, respuesta o comentario…"
+            aria-label="Buscar en el historial"
+            autocomplete="off"
+            @input="search"
+          >
         </form>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn py-1 text-[12.5px]" title="Excel / Google Sheets" :disabled="exporting" @click="download('csv')">Exportar CSV</button>
+          <button type="button" class="btn py-1 text-[12.5px]" title="Incluye filas de muestra, eventos y traza" :disabled="exporting" @click="download('json')">Exportar JSON completo</button>
+          <span v-if="exporting" class="text-[12.5px] muted" role="status">Preparando…</span>
+        </div>
 
         <p v-if="error" class="m-0 text-[13px] text-bad" role="alert">{{ error }}</p>
         <p v-else-if="loading && !runs.length" class="m-0 text-[13px] muted">Cargando…</p>
 
         <section v-if="summary" aria-labelledby="hist-summary">
-          <h3 id="hist-summary" class="section-title mb-2">Resumen por modelo</h3>
+          <h3 id="hist-summary" class="m-0 mb-2 text-[15px] font-semibold text-ink">Resumen por modelo</h3>
           <p v-if="!summary.byModel.length" class="m-0 text-[13px] muted">Sin ejecuciones con estos filtros.</p>
-          <div v-else class="scroll-thin overflow-x-auto rounded-lg border border-line bg-white">
-            <table class="w-full border-collapse text-[12.5px]">
-              <thead class="bg-canvas text-left text-ink-soft">
-                <tr>
-                  <th v-for="h in SUMMARY_HEAD" :key="h" class="whitespace-nowrap px-2.5 py-2 font-semibold">{{ h }}</th>
-                </tr>
+          <div v-else class="scroll-thin overflow-x-auto">
+            <table class="hist-table">
+              <thead>
+                <tr><th v-for="h in SUMMARY_HEAD" :key="h">{{ h }}</th></tr>
               </thead>
               <tbody>
-                <tr v-for="(m, i) in summary.byModel" :key="i" class="border-t border-line">
-                  <td class="whitespace-nowrap px-2.5 py-1.5">{{ m.model ?? '?' }}</td>
-                  <td class="px-2.5 py-1.5">{{ modeLabel(m.mode) }}</td>
-                  <td class="num px-2.5 py-1.5">{{ m.runs }}</td>
-                  <td class="num px-2.5 py-1.5 text-good">{{ m.good }}</td>
-                  <td class="num px-2.5 py-1.5 text-bad">{{ m.bad }}</td>
-                  <td class="num px-2.5 py-1.5">{{ pct(m.good, m.bad) }}</td>
-                  <td class="num px-2.5 py-1.5">{{ m.errors }}</td>
-                  <td class="num px-2.5 py-1.5">{{ m.limitHits }}</td>
-                  <td class="num px-2.5 py-1.5">{{ m.avgIterations }}</td>
-                  <td class="num px-2.5 py-1.5">{{ nf(m.avgTokens) }}</td>
-                  <td class="num px-2.5 py-1.5">{{ m.avgSeconds }}</td>
+                <tr v-for="(m, i) in summary.byModel" :key="i">
+                  <td class="whitespace-nowrap">{{ m.model ?? '?' }}</td>
+                  <td>{{ modeLabel(m.mode) }}</td>
+                  <td class="num">{{ m.runs }}</td>
+                  <td class="num">{{ m.good }}</td>
+                  <td class="num">{{ m.bad }}</td>
+                  <td class="num">{{ pct(m.good, m.bad) }}</td>
+                  <td class="num">{{ m.errors }}</td>
+                  <td class="num">{{ m.limitHits }}</td>
+                  <td class="num">{{ m.avgIterations }}</td>
+                  <td class="num">{{ m.avgTokens }}</td>
+                  <td class="num">{{ m.avgSeconds }}</td>
                 </tr>
               </tbody>
             </table>
@@ -75,33 +79,24 @@
         </section>
 
         <section v-if="summary" aria-labelledby="hist-runs">
-          <h3 id="hist-runs" class="section-title mb-2">Ejecuciones <span class="font-normal muted">({{ runs.length }} de {{ total }})</span></h3>
+          <h3 id="hist-runs" class="m-0 mb-1 text-[15px] font-semibold text-ink">Ejecuciones <span class="font-semibold text-ink-soft">({{ runs.length }} de {{ total }})</span></h3>
           <p v-if="!runs.length" class="m-0 text-[13px] muted">Nada que mostrar con estos filtros.</p>
-          <ul class="m-0 flex list-none flex-col gap-2 p-0">
-            <li v-for="r in runs" :key="r.id" class="rounded-lg border border-line bg-white px-3 py-2">
-              <div class="flex items-start gap-2">
-                <i
-                  class="mt-0.5 w-4 text-center"
-                  :class="r.rating === 1 ? 'fa-solid fa-thumbs-up text-good' : r.rating === -1 ? 'fa-solid fa-thumbs-down text-bad' : 'fa-regular fa-circle text-ink-muted'"
-                  :title="r.rating === 1 ? 'Buena' : r.rating === -1 ? 'Mala' : 'Sin valorar'"
-                  aria-hidden="true"
-                />
-                <div class="min-w-0 flex-1">
-                  <p class="m-0 text-[13.5px] font-semibold text-ink">{{ r.question.slice(0, 180) }}</p>
-                  <p class="m-0 mt-0.5 text-[12px] muted">
-                    {{ date(r.createdAt) }} · {{ r.model ?? '?' }} · {{ modeLabel(r.mode) }} ·
-                    <span :class="r.status === 'ok' ? '' : 'text-bad'">{{ r.status }}</span> · {{ r.iterations }} iter. · {{ nf(r.tokens) }} tokens · {{ (r.elapsedMs / 1000).toFixed(1) }} s
-                    <template v-if="r.tags?.length"> · {{ r.tags.join(', ') }}</template>
-                  </p>
-                  <p v-if="r.comment" class="m-0 mt-0.5 text-[12.5px] italic text-ink-soft">“{{ r.comment }}”</p>
-                </div>
-                <div class="flex shrink-0 gap-1.5">
-                  <button type="button" class="btn py-1 text-[12.5px]" :aria-expanded="openId === r.id" @click="toggle(r.id)">
-                    <i class="fa-solid" :class="openId === r.id ? 'fa-chevron-up' : 'fa-route'" aria-hidden="true" />
-                    <span :class="size.width < 700 ? 'sr-only' : ''">{{ openId === r.id ? 'Ocultar' : 'Traza y log' }}</span>
-                  </button>
-                  <CopyButton :label="size.width < 700 ? 'JSON' : 'Copiar JSON'" title="Copiar el detalle completo de la ejecución (JSON)" :text="() => detailJson(r.id)" />
-                </div>
+          <ul class="m-0 list-none p-0">
+            <li v-for="r in runs" :key="r.id" class="border-b border-line py-2.5">
+              <p class="m-0 flex items-start gap-2 text-[13.5px]">
+                <span class="hist-badge" :title="r.rating === 1 ? 'Buena' : r.rating === -1 ? 'Mala' : 'Sin valorar'">{{ r.rating === 1 ? '👍' : r.rating === -1 ? '👎' : '–' }}</span>
+                <b class="min-w-0 flex-1 text-ink">{{ r.question.slice(0, 140) }}</b>
+              </p>
+              <p class="m-0 mt-0.5 text-[12.5px] text-ink-soft">
+                {{ date(r.createdAt) }} · {{ r.model ?? '?' }} · {{ modeLabel(r.mode) }} ·
+                <span :class="r.status === 'ok' ? '' : 'text-bad'">{{ r.status }}</span> · {{ r.iterations }} iter. · {{ r.tokens }} tokens · {{ (r.elapsedMs / 1000).toFixed(1) }} s<template v-if="r.tags?.length"> · {{ r.tags.join(', ') }}</template>
+                <template v-if="r.comment"><br>“{{ r.comment }}”</template>
+              </p>
+              <div class="mt-1.5 flex flex-wrap gap-1.5">
+                <CopyButton label="Copiar detalle (JSON)" title="Copiar el detalle completo de la ejecución (JSON)" :text="() => detailJson(r.id)" />
+                <button type="button" class="btn py-1 text-[12.5px]" :aria-expanded="openId === r.id" @click="toggle(r.id)">
+                  {{ openId === r.id ? 'Ocultar traza y log' : 'Ver traza y log' }}
+                </button>
               </div>
 
               <div v-if="openId === r.id" class="mt-3 border-t border-line pt-3">
@@ -132,7 +127,7 @@
               </div>
             </li>
           </ul>
-          <button v-if="runs.length < total" type="button" class="btn mt-2" :disabled="loading" @click="load(false)">
+          <button v-if="runs.length < total" type="button" class="btn mt-3 py-1 text-[12.5px]" :disabled="loading" @click="load(false)">
             {{ loading ? 'Cargando…' : 'Cargar más' }}
           </button>
         </section>
@@ -144,8 +139,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
 import { DxPopup } from 'devextreme-vue/popup';
-import { DxSelectBox } from 'devextreme-vue/select-box';
-import { DxTextBox } from 'devextreme-vue/text-box';
 import { saveAs } from 'file-saver';
 import { exportRuns, getFacets, getRun, getRuns, getSummary, telemetryStatus } from '@/services/telemetryApi';
 import { turnFromRun } from '@/shared/runLog';
@@ -158,10 +151,10 @@ defineProps({ visible: Boolean });
 defineEmits(['close']);
 
 const DAYS = [{ value: 7, text: '7 días' }, { value: 30, text: '30 días' }, { value: 90, text: '90 días' }, { value: 365, text: '1 año' }];
-const RATINGS = [{ value: '', text: 'Todas' }, { value: -1, text: 'Malas' }, { value: 1, text: 'Buenas' }, { value: 0, text: 'Sin valorar' }];
+const RATINGS = [{ value: '', text: 'todas' }, { value: -1, text: '👎 malas' }, { value: 1, text: '👍 buenas' }, { value: 0, text: 'sin valorar' }];
 // La base puede compartirse con workflow-agent-api: allí también hay ejecuciones del diseñador de workflows.
-const MODES = [{ value: '', text: 'Todos' }, { value: 'query', text: 'Consulta' }, { value: 'workflow', text: 'Workflow' }];
-const SUMMARY_HEAD = ['Modelo', 'Modo', 'Ejec.', 'Buenas', 'Malas', 'Acierto', 'Errores', 'Límite', 'Iter.', 'Tokens prom.', 'Seg. prom.'];
+const MODES = [{ value: '', text: 'todos' }, { value: 'query', text: 'consulta' }, { value: 'workflow', text: 'workflow' }];
+const SUMMARY_HEAD = ['Modelo', 'Modo', 'Ejec.', '👍', '👎', 'Acierto', 'Errores', 'Límite', 'Iter.', 'Tokens prom.', 'Seg. prom.'];
 const DETAIL_TABS = [{ id: 'answer', label: 'Respuesta y SQL' }, { id: 'trace', label: 'Traza' }, { id: 'log', label: 'Log' }];
 const PAGE = 50;
 
@@ -177,13 +170,19 @@ const loading = ref(false);
 const error = ref('');
 const exporting = ref(false);
 
-const modelItems = computed(() => [{ value: '', text: 'Todos' }, ...(facets.value?.models ?? []).map((m) => ({ value: m, text: m }))]);
-const statusItems = computed(() => [{ value: '', text: 'Todos' }, ...(facets.value?.statuses ?? []).map((s) => ({ value: s, text: s }))]);
+const modelItems = computed(() => [{ value: '', text: 'todos' }, ...(facets.value?.models ?? []).map((m) => ({ value: m, text: m }))]);
+const statusItems = computed(() => [{ value: '', text: 'todos' }, ...(facets.value?.statuses ?? []).map((s) => ({ value: s, text: s }))]);
 
-const nf = (v) => new Intl.NumberFormat('es-MX').format(Number(v ?? 0));
 const pct = (g, b) => (g + b ? `${Math.round((100 * g) / (g + b))}%` : '–');
 const modeLabel = (m) => (m === 'workflow' ? 'workflow' : 'consulta');
 const date = (s) => new Date(s).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+
+// La búsqueda se aplica al escribir (con una pausa breve), como los filtros al cambiar.
+let searchTimer = null;
+function search() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => load(true), 350);
+}
 
 let seq = 0;
 async function load(reset) {

@@ -35,6 +35,7 @@
       <span class="flex-1">
         <span class="block text-[14px] font-semibold text-ink">{{ turn.kind === 'report' ? 'Reporte listo para editar' : 'Análisis completado' }}</span>
         <span class="mt-1 block text-[13px] leading-relaxed text-ink-soft">{{ turn.answer }}</span>
+        <span v-if="metrics" class="mt-1.5 block text-[11.5px] muted">{{ metrics }}</span>
         <span class="mt-1 flex items-center justify-between gap-2 text-[11.5px]">
           <span v-if="compact" class="font-semibold text-brandlight">Ver resultados <i class="fa-solid fa-arrow-right" aria-hidden="true" /></span>
           <span class="ml-auto muted">{{ time(turn.answeredAt) }}</span>
@@ -196,6 +197,15 @@ const QUICK_ACTIONS = [
   { id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' },
   { id: 'publish', text: 'Publicar', icon: 'fa-solid fa-share-from-square' },
 ];
+
+// Métricas de la ejecución bajo la respuesta, como en workflow-agent-api: modelo · iteraciones · tokens · segundos.
+const nf = new Intl.NumberFormat('es-MX');
+const metrics = computed(() => {
+  const t = props.turn;
+  if (t.kind === 'report' || t.iterations == null) return '';
+  const tokens = (t.usage?.inputTokens ?? 0) + (t.usage?.outputTokens ?? 0);
+  return `${t.servedBy ?? t.model ?? t.modelLabel} · ${t.iterations} ${t.iterations === 1 ? 'iteración' : 'iteraciones'} · ${nf.format(tokens)} tokens · ${((t.elapsedMs ?? 0) / 1000).toFixed(1)} s`;
+});
 
 const time = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '');
 </script>

@@ -30,6 +30,8 @@ builder.Services.PostConfigure<StorageOptions>(o => o.ConnectionString ??= Envir
 builder.Services.ConfigureTolerant<AuthOptions>(builder.Configuration.GetSection("Auth"));
 // Telemetría en otra base (o la misma con otra cadena): Telemetry__ConnectionString.
 builder.Services.ConfigureTolerant<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
+// Dictado por voz (Whisper en Groq): Transcription__GroqApiKey.
+builder.Services.ConfigureTolerant<TranscriptionOptions>(builder.Configuration.GetSection("Transcription"));
 
 var corsConfig = new CorsOptions();
 TolerantBinder.Bind(builder.Configuration.GetSection("Cors"), corsConfig);
@@ -60,6 +62,7 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<TelemetryStore>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TelemetryStore>());
 builder.Services.AddSingleton<SqlMcpClient>();
+builder.Services.AddHttpClient<GroqTranscriber>(c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddSingleton<ModelCatalog>();
 builder.Services.AddSingleton<PromptStore>();
 builder.Services.AddSingleton(sp => BusinessDictionary.Load(sp.GetRequiredService<IOptions<SqlMcpOptions>>(), sp.GetRequiredService<ILogger<BusinessDictionary>>()));
@@ -126,6 +129,23 @@ app.MapGet("/api/models", (ModelCatalog c) => Results.Ok(new
     maxIterationsLimit = c.MaxIterationsLimit,
     models = ModelCatalog.Models.Select(m => new { m.Id, m.Label, m.Note, m.Efforts, provider = "anthropic" }),
 }));
+
+// --- Dictado por voz (Whisper en Groq; el motor del navegador no pasa por aquí) ---
+app.MapGet("/api/dictation", (GroqTranscriber g) => Results.Ok(new { groq = g.Enabled, maxBytes = g.MaxBytes }));
+
+// multipart/form-data: audio (archivo), language ("es"|"en"), prompt (opcional: texto previo como contexto).
+app.MapPost("/api/transcribe", async (HttpRequest req, GroqTranscriber g, CancellationToken ct) =>
+{
+    if (!g.Enabled) return Results.Json(new { error = "Transcripción Groq no configurada (Transcription__GroqApiKey)." }, statusCode: 503);
+    if (!req.HasFormContentType) return Results.BadRequest(new { error = "Se esperaba multipart/form-data con el campo 'audio'." });
+    var form = await req.ReadFormAsync(ct);
+    var file = form.Files["audio"];
+    if (file is null || file.Length == 0) return Results.BadRequest(new { error = "Falta el archivo de audio." });
+    if (file.Length > g.MaxBytes) return Results.BadRequest(new { error = $"El audio supera {g.MaxBytes / 1024 / 1024} MB." });
+    await using var stream = file.OpenReadStream();
+    var text = await g.TranscribeAsync(stream, file.FileName, file.ContentType, form["language"].ToString(), ct, form["prompt"].ToString());
+    return Results.Ok(new { text });
+}).DisableAntiforgery();
 
 app.MapGet("/api/mcp/tools", async (SqlMcpClient mcp, CancellationToken ct) =>
     Results.Ok((await mcp.ListToolsAsync(ct)).Select(t => new { t.Name, t.Description })));

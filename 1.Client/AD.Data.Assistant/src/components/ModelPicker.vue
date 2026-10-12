@@ -8,7 +8,7 @@
       :aria-expanded="open"
       aria-haspopup="dialog"
       :aria-controls="panelId"
-      title="Modelo y esfuerzo"
+      title="Modelo, esfuerzo y dictado"
       @click="open = !open"
     >
       <i class="fa-solid fa-microchip" aria-hidden="true" />
@@ -21,7 +21,7 @@
       :id="panelId"
       class="scroll-thin absolute bottom-full left-0 z-[1300] mb-2 flex max-h-[min(560px,70vh)] w-[min(316px,calc(100vw-48px))] flex-col gap-3 overflow-y-auto rounded-xl border border-line bg-white p-3 shadow-[0_8px_28px_rgba(15,42,61,.18)]"
       role="dialog"
-      aria-label="Modelo y esfuerzo"
+      aria-label="Modelo, esfuerzo y dictado"
     >
       <template v-if="models.catalog">
         <fieldset v-for="g in groups" :key="g.provider" class="m-0 border-0 p-0">
@@ -68,6 +68,44 @@
         </div>
       </template>
       <p v-else class="m-0 text-[13px] muted">Cargando modelos…</p>
+
+      <fieldset class="m-0 border-0 border-t border-line p-0 pt-3">
+        <legend class="mb-1 p-0 text-[11.5px] font-semibold uppercase tracking-wide text-ink-muted">Dictado por voz</legend>
+        <label
+          v-for="o in ENGINE_OPTIONS"
+          :key="o.id"
+          class="flex items-start gap-2.5 rounded-lg px-2 py-1.5"
+          :class="[o.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-canvas', o.id === engine ? 'bg-[#e6f4fb]' : '']"
+        >
+          <input
+            type="radio"
+            name="ada-dictation"
+            class="mt-1 accent-[#074863]"
+            :value="o.id"
+            :checked="o.id === engine"
+            :disabled="o.disabled"
+            @change="prefs.dictationEngine = o.id"
+          >
+          <span class="min-w-0">
+            <span class="block text-[13.5px] font-medium text-ink">{{ o.label }}</span>
+            <span class="block text-[12px] leading-snug text-ink-soft">{{ o.note }}</span>
+          </span>
+        </label>
+        <div class="mt-2 flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Idioma del dictado">
+          <button
+            v-for="l in DICTATION_LANGS"
+            :key="l.id"
+            type="button"
+            role="radio"
+            :aria-checked="l.id === (prefs.dictationLang || 'es')"
+            class="flex-1 cursor-pointer rounded-md border-0 px-1 py-1.5 text-[12.5px]"
+            :class="l.id === (prefs.dictationLang || 'es') ? 'bg-brandblue font-semibold text-white' : 'bg-transparent text-ink-soft hover:text-brandblue'"
+            @click="prefs.dictationLang = l.id"
+          >
+            {{ l.label }}
+          </button>
+        </div>
+      </fieldset>
     </div>
   </div>
 </template>
@@ -77,6 +115,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useModelsStore } from '@/stores/models';
 import { usePrefsStore } from '@/stores/prefs';
 import { EFFORT_LABELS, PROVIDER_LABELS, effortLabel } from '@/shared/models';
+import { DICTATION_LANGS, ENGINE_OPTIONS, effectiveEngine, loadDictationEngines } from '@/shared/dictationEngines';
 
 defineProps({ disabled: Boolean });
 
@@ -111,5 +150,6 @@ function pickModel(id) {
   prefs.model = id;
 }
 
-onMounted(() => models.load());
+onMounted(() => { models.load(); loadDictationEngines(); });
+const engine = computed(() => effectiveEngine(prefs.dictationEngine));
 </script>

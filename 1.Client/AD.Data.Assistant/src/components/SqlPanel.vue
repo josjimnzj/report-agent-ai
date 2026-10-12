@@ -13,7 +13,7 @@
           <i class="fa-regular fa-copy" aria-hidden="true" /> Copiar SQL
         </button>
       </header>
-      <pre class="scroll-thin m-0 overflow-x-auto bg-[#0f2a3d] p-4 text-[12.5px] leading-relaxed text-[#e6f0f7]"><code>{{ q }}</code></pre>
+      <pre class="sql-pre"><code>{{ q }}</code></pre>
     </section>
   </div>
 </template>

@@ -56,6 +56,28 @@ export function entryLabel(e) {
   }
 }
 
+/**
+ * Cómo se muestra una entrada en la pestaña Log (mismo formato que el visor de workflow-agent-api).
+ * @returns {{ label: string, detail: string, body: string|null, open: boolean, tone: 'ok'|'err'|'muted'|'' }}
+ */
+export function entryView(e) {
+  const v = (label, detail = '', tone = '', body = null, open = false) => ({ label, detail, tone, body, open });
+  switch (e.k) {
+    case 'phase': return v('', e.text, 'muted');
+    case 'status': return v('', e.text);
+    case 'request': return v('solicitud', `${e.provider ?? 'anthropic'} · modelo=${e.model} esfuerzo=${e.effort ?? 'n/a'}${e.fallback ? ` respaldo=${e.fallback}` : ''} prompt_sistema=${e.systemChars} caracteres · herramientas: ${(e.tools || []).join(', ')}`);
+    case 'think': return v('razonamiento', '', 'think', e.text, true);
+    case 'text': return v('respuesta del modelo', '', '', e.text, true);
+    case 'tool_prep': return v('', `preparando ${e.tool}…`, 'muted');
+    case 'tool_call': return v(`⚙ ${e.tool} (entrada)`, '', '', JSON.stringify(e.input, null, 2));
+    case 'tool_result': return v(`${e.isError ? '✖' : '✔'} ${e.tool} (${e.ms} ms)`, '', e.isError ? 'err' : 'ok', e.result ?? '');
+    case 'turn_end': return v('', `fin iteración ${e.iteration}: stop=${e.stopReason}${e.servedBy ? ` · servido por ${e.servedBy}` : ''} · tokens ${e.inputTokens}/${e.outputTokens} (caché leída ${e.cacheReadTokens}, creada ${e.cacheCreationTokens}) · ${e.ms} ms`, 'muted');
+    case 'done': return v('completado', `· ${e.ms} ms`, 'ok');
+    case 'error': return v('', `ERROR: ${e.text}`, 'err');
+    default: return v('', e.k);
+  }
+}
+
 /** Cuerpo largo de la entrada (razonamiento, texto, entrada o resultado de herramienta) o null. */
 export function entryBody(e) {
   if (e.k === 'think' || e.k === 'text') return e.text;

@@ -66,6 +66,7 @@ Campañas, segmentos y publicar en el menú **aún no tienen backend**. En el fr
 | `SqlMcp__Host`, `__Port`, `__Database`, `__User`, `__Password`, `__Encrypt`, `__TrustCert` | SQL Server del CEM (solo lectura) |
 | `SqlMcp__Script` | Ruta del MCP compilado (en la imagen: `/opt/addaccion-mcp-sql/dist/index.js`) |
 | `Anthropic__Model` / `__Effort` / `__DefaultMaxIterations` | Valores por defecto |
+| `Transcription__GroqApiKey` | Opcional. Dictado por voz con Whisper en Groq (`GET /api/dictation`, `POST /api/transcribe`). Sin clave, el front solo ofrece el dictado del navegador |
 | `Telemetry__ConnectionString` | Opcional. Postgres **aparte** (otra base u otra cadena de Neon) para la telemetría. Sin valor, la telemetría está apagada |
 | `Telemetry__RetentionDays` / `__RowSample` / `__MaxEventBytes` / `__MaxToolResultChars` | Retención (90 días para ejecuciones sin valoración), filas de muestra (20) y recortes del log |
 

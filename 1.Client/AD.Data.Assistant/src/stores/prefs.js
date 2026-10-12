@@ -13,6 +13,9 @@ export const usePrefsStore = defineStore('prefs', {
     // null = el valor por defecto del catálogo (/api/models).
     model: null,
     effort: null,
+    // Dictado por voz: null = el mejor disponible (Whisper en Groq si el servidor lo tiene; si no, el navegador).
+    dictationEngine: null,
+    dictationLang: 'es',
   }),
   actions: {
     /** Modo API: carga las preferencias de Neon y guarda cada cambio (con un pequeño retardo). */
