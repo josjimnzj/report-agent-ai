@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using AD.Data.Assistant.Api;
 using AD.Data.Assistant.Api.Agent;
 using AD.Data.Assistant.Api.Options;
@@ -9,6 +10,33 @@ namespace AD.Data.Assistant.Api.Tests;
 public class AgentTests
 {
     private static JsonElement J(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    [Fact]
+    public void TolerantBinder_ignora_valores_invalidos_y_acepta_alias_booleanos()
+    {
+        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["X:Model"] = "claude-sonnet-5-5",
+            ["X:ServerFallbacks"] = "no",
+            ["X:MaxTokens"] = "mucho",
+            ["X:MaxIterationsLimit"] = "30",
+        }).Build();
+        var o = new AnthropicOptions();
+        TolerantBinder.Bind(cfg.GetSection("X"), o);
+        Assert.Equal("claude-sonnet-5-5", o.Model);
+        Assert.False(o.ServerFallbacks);
+        Assert.Equal(64000, o.MaxTokens);
+        Assert.Equal(30, o.MaxIterationsLimit);
+        Assert.Contains(TolerantBinder.Errors, e => e.StartsWith("X:MaxTokens"));
+
+        var mcp = new SqlMcpOptions();
+        TolerantBinder.Bind(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["S:Port"] = "1444", ["S:ExtraEnv:SCHEMA_GRAPH_PATH"] = "/g.json",
+        }).Build().GetSection("S"), mcp);
+        Assert.Equal(1444, mcp.Port);
+        Assert.Equal("/g.json", mcp.ExtraEnv["SCHEMA_GRAPH_PATH"]);
+    }
 
     [Fact]
     public void ParseQueryResult_lee_la_salida_de_execute_query()

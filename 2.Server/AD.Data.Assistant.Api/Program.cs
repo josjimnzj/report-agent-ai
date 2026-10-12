@@ -22,16 +22,18 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
     o.KnownProxies.Clear();
 });
 
-builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection("Anthropic"));
+builder.Services.ConfigureTolerant<AnthropicOptions>(builder.Configuration.GetSection("Anthropic"));
 builder.Services.PostConfigure<AnthropicOptions>(o => o.ApiKey ??= Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"));
-builder.Services.Configure<SqlMcpOptions>(builder.Configuration.GetSection("SqlMcp"));
-builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.ConfigureTolerant<SqlMcpOptions>(builder.Configuration.GetSection("SqlMcp"));
+builder.Services.ConfigureTolerant<StorageOptions>(builder.Configuration.GetSection("Storage"));
 builder.Services.PostConfigure<StorageOptions>(o => o.ConnectionString ??= Environment.GetEnvironmentVariable("DATABASE_URL"));
-builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
+builder.Services.ConfigureTolerant<AuthOptions>(builder.Configuration.GetSection("Auth"));
 // Telemetría en otra base (o la misma con otra cadena): Telemetry__ConnectionString.
-builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
+builder.Services.ConfigureTolerant<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
 
-var corsOrigins = (builder.Configuration.GetSection("Cors").Get<CorsOptions>() ?? new CorsOptions()).Origins;
+var corsConfig = new CorsOptions();
+TolerantBinder.Bind(builder.Configuration.GetSection("Cors"), corsConfig);
+var corsOrigins = corsConfig.Origins;
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 {
     if (corsOrigins.Length == 0) return;
@@ -66,6 +68,12 @@ builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamin
 
 var app = builder.Build();
 
+// Fuerza el enlace de las opciones al arrancar para que los valores inválidos salgan en el log de inicio.
+_ = (app.Services.GetRequiredService<IOptions<AnthropicOptions>>().Value, app.Services.GetRequiredService<IOptions<SqlMcpOptions>>().Value,
+    app.Services.GetRequiredService<IOptions<StorageOptions>>().Value, app.Services.GetRequiredService<IOptions<AuthOptions>>().Value,
+    app.Services.GetRequiredService<IOptions<TelemetryOptions>>().Value);
+foreach (var e in TolerantBinder.Errors) app.Logger.LogWarning("Configuración: {Error}", e);
+
 app.UseForwardedHeaders();
 app.UseCors(); // antes de la API key: el preflight OPTIONS no lleva credenciales
 // Front compilado (wwwroot) servido por la misma API. index.html siempre revalidado; los assets llevan hash.
@@ -86,6 +94,13 @@ app.Use(async (ctx, next) =>
         ctx.Response.StatusCode = ex.StatusCode;
         await ctx.Response.WriteAsJsonAsync(new { error = ex.Message });
     }
+    catch (Exception ex) when (!ctx.Response.HasStarted && !ctx.RequestAborted.IsCancellationRequested)
+    {
+        // Sin esto el 500 sale sin cuerpo y el front no puede mostrar nada útil.
+        ctx.RequestServices.GetRequiredService<ILogger<Program>>().LogError(ex, "Error no controlado en {Path}", ctx.Request.Path);
+        ctx.Response.StatusCode = 500;
+        await ctx.Response.WriteAsJsonAsync(new { error = "Error interno del servidor. Revisa /health y el log del servicio." });
+    }
 });
 
 var commit = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? Environment.GetEnvironmentVariable("GIT_COMMIT");
@@ -99,6 +114,7 @@ app.MapGet("/health", (IDocumentStore store, IOptions<AnthropicOptions> ai, Tele
     storageError = StoreInitializer.LastError,
     anthropic = !string.IsNullOrWhiteSpace(ai.Value.ApiKey),
     telemetry = tel.Enabled,
+    configErrors = TolerantBinder.Errors,
 }));
 
 app.MapGet("/api/models", (ModelCatalog c) => Results.Ok(new

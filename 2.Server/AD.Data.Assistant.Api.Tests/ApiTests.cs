@@ -33,6 +33,32 @@ public class ApiTests(WebApplicationFactory<Program> factory) : IClassFixture<We
     }
 
     [Fact]
+    public async Task Configuracion_invalida_no_tumba_health_ni_models()
+    {
+        var app = factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Auth:ApiKey", "test-key");
+            b.UseSetting("Storage:ConnectionString", "");
+            b.UseSetting("Anthropic:ServerFallbacks", "quizá");
+            b.UseSetting("Anthropic:MaxTokens", "64k");
+            b.UseSetting("Anthropic:DefaultMaxIterations", " 8 ");
+        });
+        var c = app.CreateClient();
+        c.DefaultRequestHeaders.Add("X-Api-Key", "test-key");
+
+        var models = await c.GetAsync("/api/models");
+        Assert.Equal(HttpStatusCode.OK, models.StatusCode);
+        var body = await models.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(8, body.GetProperty("defaultMaxIterations").GetInt32());
+
+        var health = await c.GetFromJsonAsync<JsonElement>("/health");
+        var errors = health.GetProperty("configErrors").EnumerateArray().Select(e => e.GetString()!).ToArray();
+        Assert.Contains(errors, e => e.StartsWith("Anthropic:ServerFallbacks"));
+        Assert.Contains(errors, e => e.StartsWith("Anthropic:MaxTokens"));
+        Assert.DoesNotContain(errors, e => e.Contains("quizá") || e.Contains("64k")); // sin valores: pueden ser secretos
+    }
+
+    [Fact]
     public async Task Documentos_crud_y_validaciones()
     {
         var c = Client();
