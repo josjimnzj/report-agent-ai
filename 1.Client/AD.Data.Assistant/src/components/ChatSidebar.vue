@@ -41,15 +41,38 @@
         />
       </div>
 
-      <nav class="scroll-thin flex-1 overflow-y-auto px-2 pb-3">
-        <h2 class="section-title px-2 pb-1 pt-4">Conversaciones</h2>
+      <!-- Móvil: una sección a la vez, para que los reportes no queden debajo de todas las conversaciones. -->
+      <div v-if="drawer" class="mx-3 mt-3 flex rounded-lg border border-line p-0.5" role="tablist" aria-label="Sección">
+        <button
+          v-for="sec in SECTIONS"
+          :key="sec.id"
+          type="button"
+          role="tab"
+          :aria-selected="section === sec.id"
+          class="flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 text-[13.5px]"
+          :class="section === sec.id ? 'bg-brandblue font-semibold text-white' : 'bg-transparent text-ink-soft'"
+          @click="section = sec.id"
+        >
+          {{ sec.label }} <span class="text-[12px] opacity-80">({{ sec.id === 'chats' ? filteredChats.length : filteredReports.length }})</span>
+        </button>
+      </div>
 
-        <div v-if="chats.allTags.length" class="flex flex-wrap gap-1.5 px-2 pb-2 pt-1" role="group" aria-label="Filtrar por etiqueta">
+      <nav class="scroll-thin flex-1 overflow-y-auto px-2 pb-3">
+        <template v-if="!drawer || section === 'chats'">
+        <h2 class="section-title px-2 pb-1" :class="drawer ? 'sr-only' : 'pt-4'">Conversaciones</h2>
+
+        <div
+          v-if="chats.allTags.length"
+          class="flex gap-1.5 px-2 pb-2 pt-1"
+          :class="drawer ? 'scroll-thin mt-2 flex-nowrap overflow-x-auto' : 'flex-wrap'"
+          role="group"
+          aria-label="Filtrar por etiqueta"
+        >
           <button
             v-for="t in chats.allTags"
             :key="t"
             type="button"
-            class="tag-chip cursor-pointer"
+            class="tag-chip shrink-0 cursor-pointer"
             :class="activeTag === t ? 'tag-chip-active' : ''"
             :aria-pressed="activeTag === t"
             @click="activeTag = activeTag === t ? null : t"
@@ -62,22 +85,29 @@
           <li v-for="c in visibleChats" :key="c.id" class="group relative">
             <button
               type="button"
-              class="flex w-full cursor-pointer flex-col items-start gap-1 rounded-lg border-0 py-2 pl-2.5 pr-10 text-left"
-              :class="c.id === activeChatId ? 'bg-[#e6f4fb]' : 'bg-transparent hover:bg-canvas'"
+              class="flex w-full cursor-pointer rounded-lg border-0 pl-2.5 text-left"
+              :class="[c.id === activeChatId ? 'bg-[#e6f4fb]' : 'bg-transparent hover:bg-canvas',
+                       drawer ? 'min-h-[48px] items-center gap-2 py-1.5 pr-12' : 'flex-col items-start gap-1 py-2 pr-10']"
               :title="c.title"
               :aria-current="c.id === activeChatId ? 'page' : undefined"
               @click="$emit('open-chat', c.id)"
             >
-              <span class="flex w-full items-center gap-2 pr-1">
+              <span class="flex min-w-0 items-center gap-2 pr-1" :class="drawer ? 'flex-1' : 'w-full'">
                 <span class="flex-1 truncate text-[13.5px]" :class="c.id === activeChatId ? 'font-semibold text-brandblue' : 'text-ink'">{{ c.title }}</span>
                 <i v-if="c.pinned" class="fa-solid fa-thumbtack text-[11px] text-ink-muted" aria-label="Fijado" />
               </span>
-              <span v-if="c.tags?.length" class="flex flex-wrap gap-1">
+              <!-- Móvil: etiquetas al lado del título (una y «+n») para que cada fila ocupe una sola línea. -->
+              <span v-if="c.tags?.length && drawer" class="flex shrink-0 items-center gap-1">
+                <span class="tag-chip tag-chip-sm max-w-[90px] truncate">{{ c.tags[0] }}</span>
+                <span v-if="c.tags.length > 1" class="text-[11px] text-ink-muted" :title="c.tags.join(', ')">+{{ c.tags.length - 1 }}</span>
+              </span>
+              <span v-else-if="c.tags?.length" class="flex flex-wrap gap-1">
                 <span v-for="t in c.tags" :key="t" class="tag-chip tag-chip-sm">{{ t }}</span>
               </span>
             </button>
             <KebabMenu
-              class="absolute right-1 top-1"
+              class="absolute right-1"
+              :class="drawer ? 'top-1/2 -translate-y-1/2' : 'top-1'"
               :label="`Acciones de «${c.title}»`"
               :items="chatMenu(c)"
               @select="(a) => onChatAction(a, c)"
@@ -94,14 +124,16 @@
           <i class="fa-solid fa-ellipsis w-4 text-center" aria-hidden="true" />
           {{ showAllChats ? 'Ver menos' : `Ver todas (${filteredChats.length})` }}
         </button>
+        </template>
 
-        <h2 class="section-title px-2 pb-1 pt-6">Reportes guardados</h2>
+        <template v-if="!drawer || section === 'reports'">
+        <h2 class="section-title px-2 pb-1" :class="drawer ? 'sr-only' : 'pt-6'">Reportes guardados</h2>
         <ul class="m-0 list-none p-0">
           <li v-for="r in visibleReports" :key="r.id" class="group relative">
             <button
               type="button"
-              class="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 py-2 pl-2 pr-10 text-left text-[13.5px]"
-              :class="r.id === activeReportId ? 'bg-[#e6f4fb] text-brandblue font-medium' : 'bg-transparent hover:bg-canvas'"
+              class="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 pl-2 text-left text-[13.5px]"
+              :class="[r.id === activeReportId ? 'bg-[#e6f4fb] text-brandblue font-medium' : 'bg-transparent hover:bg-canvas', drawer ? 'min-h-[48px] py-1.5 pr-12' : 'py-2 pr-10']"
               :title="r.title"
               @click="$emit('open-report', r)"
             >
@@ -129,10 +161,11 @@
           @click="showAllReports = !showAllReports"
         >
           <i class="fa-solid fa-ellipsis w-4 text-center" aria-hidden="true" />
-          {{ showAllReports ? 'Ver menos' : 'Ver todos' }}
+          {{ showAllReports ? 'Ver menos' : `Ver todos (${filteredReports.length})` }}
         </button>
+        </template>
 
-        <template v-if="actions.recent.length && !IS_API">
+        <template v-if="actions.recent.length && !IS_API && (!drawer || section === 'reports')">
           <h2 class="section-title px-2 pb-1 pt-6">Segmentos y campañas</h2>
           <ul class="m-0 list-none p-0">
             <li v-for="x in actions.recent" :key="x.id" class="relative">
@@ -191,6 +224,13 @@
   </aside>
 </template>
 
+<script>
+import { ref as moduleRef } from 'vue';
+
+// Estado de los listados compartido entre montajes (cajón móvil y menú de escritorio).
+const listState = { showAllChats: moduleRef(false), showAllReports: moduleRef(false), section: moduleRef('chats') };
+</script>
+
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { DxTextBox } from 'devextreme-vue/text-box';
@@ -232,8 +272,11 @@ const actions = useActionsStore();
 
 const search = ref('');
 const activeTag = ref(null);
-const showAllChats = ref(false);
-const showAllReports = ref(false);
+// Se recuerdan al cerrar y volver a abrir el cajón (el componente se vuelve a montar).
+const showAllChats = listState.showAllChats;
+const showAllReports = listState.showAllReports;
+const section = listState.section;
+const SECTIONS = [{ id: 'chats', label: 'Conversaciones' }, { id: 'reports', label: 'Reportes' }];
 const editing = ref(null);
 const renamingReport = ref(null);
 

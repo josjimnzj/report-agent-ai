@@ -3,7 +3,7 @@
     <button
       :id="buttonId"
       type="button"
-      :class="text ? ['btn', primary ? 'btn-primary' : ''] : ['icon-btn h-8 w-8', open ? 'bg-canvas text-brandblue' : '']"
+      :class="text ? ['btn kebab-btn', primary ? 'btn-primary' : ''] : ['icon-btn kebab-btn h-8 w-8', open ? 'bg-canvas text-brandblue' : '']"
       :title="label"
       :aria-label="label"
       aria-haspopup="menu"

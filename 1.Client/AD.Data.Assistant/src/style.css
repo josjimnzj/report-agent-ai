@@ -96,6 +96,19 @@ input.hist-select { background: theme('colors.canvas'); }
   display: inline-flex; min-width: 30px; justify-content: center; border: 1px solid theme('colors.line'); border-radius: 999px;
   padding: 0 6px; font-size: 12px; line-height: 20px;
 }
+/* Sombras de ScrollX: indican que la tabla sigue a la izquierda o a la derecha. */
+.scroll-fade { pointer-events: none; position: absolute; top: 0; bottom: 0; width: 18px; z-index: 2; }
+.scroll-fade-left { background: linear-gradient(to right, rgba(15, 42, 61, .16), transparent); }
+.scroll-fade-right { right: 0; background: linear-gradient(to left, rgba(15, 42, 61, .16), transparent); }
+/* Historial en móvil: filtros extra en dos columnas, con la etiqueta encima. */
+.mobile-filters { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mobile-filters label { flex-direction: column; align-items: stretch; gap: 2px; font-size: 12.5px; }
+.mobile-filters select { height: 44px; width: 100%; }
+/* En pantallas táctiles los menús ⋯ miden 44 px (tamaño mínimo recomendado para el dedo). */
+@media (pointer: coarse) {
+  .kebab-btn.icon-btn { width: 44px; height: 44px; }
+  .kebab-btn.btn { min-height: 44px; }
+}
 /* Entradas desplegables (traza y log): triángulo ▶ que gira al abrir. */
 .disclosure > summary { list-style: none; }
 .disclosure > summary::-webkit-details-marker { display: none; }

@@ -23,12 +23,16 @@
         :format="c.format"
         :alignment="c.alignment"
         :customize-text="c.customizeText"
+        :fixed="narrow && c.first"
+        fixed-position="left"
       />
       <DxSummary>
         <DxTotalItem v-for="c in numericColumns" :key="c.dataField" :column="c.dataField" summary-type="sum" :value-format="c.format" display-format="{0}" />
       </DxSummary>
-      <DxFilterRow :visible="true" />
-      <DxSearchPanel :visible="true" :width="220" placeholder="Buscar…" />
+      <!-- En móvil la fila de filtros por columna ocupa media pantalla: queda el buscador. -->
+      <DxFilterRow :visible="!narrow" />
+      <DxSearchPanel :visible="true" :width="narrow ? 180 : 220" placeholder="Buscar…" />
+      <DxColumnFixing :enabled="narrow" />
       <DxSorting mode="multiple" />
       <DxPaging :page-size="20" />
       <DxPager :show-info="true" info-text="Página {0} de {1} ({2} filas)" />
@@ -40,7 +44,7 @@
 <script setup>
 import { computed } from 'vue';
 import DxDataGrid, {
-  DxColumn, DxExport, DxFilterRow, DxPager, DxPaging, DxSearchPanel, DxSorting, DxSummary, DxTotalItem,
+  DxColumn, DxColumnFixing, DxExport, DxFilterRow, DxPager, DxPaging, DxSearchPanel, DxSorting, DxSummary, DxTotalItem,
 } from 'devextreme-vue/data-grid';
 import { exportDataGrid } from 'devextreme/excel_exporter';
 import { Workbook } from 'exceljs';
@@ -56,9 +60,11 @@ const props = defineProps({
 });
 
 const dataSource = computed(() => rowsAsObjects(props.columns, props.rows));
+const narrow = window.innerWidth < 700;
 const isPeriod = (v) => typeof v === 'string' && /^\d{4}-\d{2}$/.test(v);
 
-const columnDefs = computed(() => props.columns.map((c) => {
+const columnDefs = computed(() => props.columns.map((c, i) => ({ ...columnDef(c), first: i === 0 })));
+const columnDef = (c) => {
   const numeric = props.rows.length && props.rows.every((r) => typeof r[props.columns.indexOf(c)] === 'number');
   if (c === 'Mes' && props.rows.every((r) => r[props.columns.indexOf(c)] == null || isPeriod(r[props.columns.indexOf(c)]))) {
     return {
@@ -74,7 +80,7 @@ const columnDefs = computed(() => props.columns.map((c) => {
     alignment: 'right',
     format: isMoneyColumn(c) ? { type: 'currency', currency: 'MXN', precision: 0 } : '#,##0.##',
   };
-}));
+};
 // Totales solo donde sumar tiene sentido (no en porcentajes, promedios, años o identificadores).
 const NOT_ADDITIVE = /(%|porcentaje|pct|tasa|promedio|media|ratio|a[ñn]o|anio|mes|^id|id$)/i;
 const numericColumns = computed(() => columnDefs.value.filter((c) => c.dataType === 'number' && !NOT_ADDITIVE.test(c.dataField)));

@@ -34,6 +34,17 @@
             </button>
           </p>
         </div>
+        <!-- Móvil: todas las acciones en un solo menú junto al título (deja la fila de pestañas libre). -->
+        <KebabMenu
+          v-if="narrow"
+          class="no-print shrink-0"
+          text="Acciones"
+          icon="fa-solid fa-bolt"
+          primary
+          label="Acciones sobre el reporte"
+          :items="mobileActions"
+          @select="onMobileAction"
+        />
         <div v-if="sales" class="no-print" :class="narrow ? 'w-full' : 'w-[210px]'">
           <DxSelectBox
             v-model:value="prefs.months"
@@ -48,21 +59,31 @@
       <div class="no-print flex flex-wrap items-end gap-x-2 border-b border-line" :class="narrow ? 'px-2' : 'px-6'">
         <div class="flex flex-1 gap-1" :class="narrow ? 'scroll-thin overflow-x-auto' : 'min-w-max'" role="tablist" aria-label="Vistas del resultado">
           <button
-            v-for="t in tabs"
+            v-for="t in shownTabs"
             :id="`tab-${t.id}`"
             :key="t.id"
             type="button"
             role="tab"
             :aria-selected="tab === t.id"
             :aria-controls="`panel-${t.id}`"
-            class="-mb-px flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border-0 border-b-[3px] bg-transparent px-3 py-2.5 text-[14px]"
-            :class="tab === t.id ? 'border-brandlight font-semibold text-brandblue' : 'border-transparent text-ink-soft hover:text-brandblue'"
+            class="-mb-px flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border-0 border-b-[3px] bg-transparent py-2.5 text-[14px]"
+            :class="[tab === t.id ? 'border-brandlight font-semibold text-brandblue' : 'border-transparent text-ink-soft hover:text-brandblue', narrow ? 'px-2.5' : 'px-3']"
             @click="tab = t.id"
           >
-            <i class="fa-solid" :class="t.icon" aria-hidden="true" /> {{ t.label }}
+            <i v-if="!narrow" class="fa-solid" :class="t.icon" aria-hidden="true" /> {{ t.label }}
           </button>
+          <!-- Móvil: SQL, JSON, Traza y Log en un menú, para que las pestañas quepan sin desplazar. -->
+          <span v-if="techTabs.length" role="presentation" class="-mb-px flex shrink-0 border-0 border-b-[3px]" :class="techActive ? 'border-brandlight' : 'border-transparent'">
+            <KebabMenu
+              :text="techActive ? techActive.label : 'Técnico'"
+              icon="fa-solid fa-code"
+              label="Vistas técnicas: SQL, JSON, traza y log"
+              :items="techTabs.map((t) => ({ id: t.id, text: t.label, icon: `fa-solid ${t.icon}` }))"
+              @select="(id) => (tab = id)"
+            />
+          </span>
         </div>
-        <div class="flex gap-2 py-2" :class="narrow ? 'w-full justify-end' : 'flex-wrap'">
+        <div v-if="!narrow" class="flex flex-wrap gap-2 py-2">
           <KebabMenu
             text="Acciones"
             icon="fa-solid fa-bolt"
@@ -254,13 +275,15 @@ const ACTIONS = [
   { id: 'share', label: 'Compartir', icon: 'fa-solid fa-share-nodes' },
 ];
 const DEFAULT_TITLE = DEFAULT_REPORT_TITLE;
+const TECH_TABS = ['sql', 'json', 'trace', 'log'];
 // Con el backend real aún no existen: se muestran deshabilitadas como «próximamente».
 const reportActions = [
   { id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn' },
   { id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' },
   { id: 'publish', text: 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' },
 ].map((a) => (IS_API ? { ...a, text: `${a.text} (próximamente)`, disabled: true } : a));
-defineEmits(['report-action', 'edit-report']);
+const emit = defineEmits(['report-action', 'edit-report']);
+const emitAction = (mode) => emit('report-action', mode, actionContext());
 
 const session = useSessionStore();
 const prefs = usePrefsStore();
@@ -296,6 +319,18 @@ function actionContext() {
 const sales = computed(() => Boolean(result.value) && isSalesResult(result.value.columns));
 // Traza y Log son de una respuesta del chat (no de un reporte guardado abierto).
 const turn = computed(() => (result.value?.turnId ? session.chat.turns.find((t) => t.id === result.value.turnId) ?? null : null));
+// Móvil: las pestañas técnicas van en el menú «Técnico» y las acciones en un solo menú «Acciones».
+const shownTabs = computed(() => (narrow.value ? tabs.value.filter((t) => !TECH_TABS.includes(t.id)) : tabs.value));
+const techTabs = computed(() => (narrow.value ? tabs.value.filter((t) => TECH_TABS.includes(t.id)) : []));
+const techActive = computed(() => techTabs.value.find((t) => t.id === tab.value) ?? null);
+const mobileActions = computed(() => [
+  ...ACTIONS.map((a) => ({ id: a.id, text: a.label, icon: a.icon })),
+  ...reportActions.map((a, i) => ({ ...a, id: `report:${a.id}`, beginGroup: i === 0 })),
+]);
+function onMobileAction(id) {
+  if (id.startsWith('report:')) emitAction(id.slice(7));
+  else run(id);
+}
 const tabs = computed(() => TABS.filter((t) => (t.id !== 'insights' || sales.value || genericInsights.value.length) && ((t.id !== 'trace' && t.id !== 'log' && t.id !== 'json') || turn.value)));
 /** Tabla primero (sin gráfica pedida o «Solo tabla») o gráfica; con la sugerencia del agente para llevarla a gráfica. */
 const display = computed(() => (result.value && !sales.value ? resultDisplay(result.value) : { table: false, suggestion: null, chart: null }));

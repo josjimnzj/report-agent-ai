@@ -4,6 +4,7 @@
     title="Historial y métricas"
     :width="size.width"
     :height="size.height"
+    :full-screen="mobile"
     :show-close-button="true"
     :hide-on-outside-click="true"
     @hiding="$emit('close')"
@@ -17,22 +18,46 @@
 
       <template v-else>
         <form class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13.5px] text-ink-soft" aria-label="Filtros" @submit.prevent="load(true)">
-          <label class="flex items-center gap-1.5">Periodo
-            <select v-model="filters.days" class="hist-select" @change="load(true)"><option v-for="o in DAYS" :key="o.value" :value="o.value">{{ o.text }}</option></select>
-          </label>
-          <label class="flex items-center gap-1.5">Valoración
-            <select v-model="filters.rating" class="hist-select" @change="load(true)"><option v-for="o in RATINGS" :key="o.value" :value="o.value">{{ o.text }}</option></select>
-          </label>
-          <label class="flex items-center gap-1.5">Modelo
-            <select v-model="filters.model" class="hist-select min-w-[150px]" @change="load(true)"><option v-for="o in modelItems" :key="o.value" :value="o.value">{{ o.text }}</option></select>
-          </label>
-          <label class="flex items-center gap-1.5">Modo
-            <select v-model="filters.mode" class="hist-select" @change="load(true)"><option v-for="o in MODES" :key="o.value" :value="o.value">{{ o.text }}</option></select>
-          </label>
-          <label class="flex items-center gap-1.5">Estado
-            <select v-model="filters.status" class="hist-select" @change="load(true)"><option v-for="o in statusItems" :key="o.value" :value="o.value">{{ o.text }}</option></select>
-          </label>
           <input
+            v-if="mobile"
+            v-model="filters.q"
+            type="search"
+            class="hist-select h-11 w-full"
+            placeholder="Buscar en pregunta, respuesta o comentario…"
+            aria-label="Buscar en el historial"
+            autocomplete="off"
+            @input="search"
+          >
+          <label class="flex items-center gap-1.5" :class="mobile ? 'flex-1' : ''">Periodo
+            <select v-model="filters.days" class="hist-select" :class="mobile ? 'h-11 flex-1' : ''" @change="load(true)"><option v-for="o in DAYS" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+          </label>
+          <button
+            v-if="mobile"
+            type="button"
+            class="btn h-11"
+            :aria-expanded="filtersOpen"
+            aria-controls="hist-more-filters"
+            @click="filtersOpen = !filtersOpen"
+          >
+            <i class="fa-solid fa-sliders" aria-hidden="true" /> Filtros<template v-if="activeFilters"> ({{ activeFilters }})</template>
+          </button>
+          <KebabMenu v-if="mobile" text="Exportar" icon="fa-solid fa-download" compact-text label="Exportar el historial" :items="EXPORTS" @select="download" />
+          <div v-show="!mobile || filtersOpen" id="hist-more-filters" :class="mobile ? 'mobile-filters' : 'contents'">
+            <label class="flex items-center gap-1.5">Valoración
+              <select v-model="filters.rating" class="hist-select" @change="load(true)"><option v-for="o in RATINGS" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+            </label>
+            <label class="flex items-center gap-1.5">Modelo
+              <select v-model="filters.model" class="hist-select" :class="mobile ? '' : 'min-w-[150px]'" @change="load(true)"><option v-for="o in modelItems" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+            </label>
+            <label class="flex items-center gap-1.5">Modo
+              <select v-model="filters.mode" class="hist-select" @change="load(true)"><option v-for="o in MODES" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+            </label>
+            <label class="flex items-center gap-1.5">Estado
+              <select v-model="filters.status" class="hist-select" @change="load(true)"><option v-for="o in statusItems" :key="o.value" :value="o.value">{{ o.text }}</option></select>
+            </label>
+          </div>
+          <input
+            v-if="!mobile"
             v-model="filters.q"
             type="search"
             class="hist-select min-w-[220px] flex-1"
@@ -42,11 +67,12 @@
             @input="search"
           >
         </form>
-        <div class="flex flex-wrap items-center gap-2">
+        <div v-if="!mobile" class="flex flex-wrap items-center gap-2">
           <button type="button" class="btn py-1 text-[12.5px]" title="Excel / Google Sheets" :disabled="exporting" @click="download('csv')">Exportar CSV</button>
           <button type="button" class="btn py-1 text-[12.5px]" title="Incluye filas de muestra, eventos y traza" :disabled="exporting" @click="download('json')">Exportar JSON completo</button>
           <span v-if="exporting" class="text-[12.5px] muted" role="status">Preparando…</span>
         </div>
+        <p v-else-if="exporting" class="m-0 text-[12.5px] muted" role="status">Preparando la exportación…</p>
 
         <p v-if="error" class="m-0 text-[13px] text-bad" role="alert">{{ error }}</p>
         <p v-else-if="loading && !runs.length" class="m-0 text-[13px] muted">Cargando…</p>
@@ -54,7 +80,22 @@
         <section v-if="summary" aria-labelledby="hist-summary">
           <h3 id="hist-summary" class="m-0 mb-2 text-[15px] font-semibold text-ink">Resumen por modelo</h3>
           <p v-if="!summary.byModel.length" class="m-0 text-[13px] muted">Sin ejecuciones con estos filtros.</p>
-          <div v-else class="scroll-thin overflow-x-auto">
+          <ul v-else-if="mobile" class="m-0 grid list-none gap-2 p-0">
+            <li v-for="(m, i) in summary.byModel" :key="i" class="rounded-lg border border-line bg-white px-3 py-2">
+              <p class="m-0 flex items-baseline justify-between gap-2 text-[13.5px]">
+                <b class="truncate text-ink">{{ m.model ?? '?' }}</b><span class="shrink-0 text-[12px] muted">{{ modeLabel(m.mode) }} · {{ m.runs }} ejec.</span>
+              </p>
+              <dl class="m-0 mt-1.5 grid grid-cols-3 gap-x-2 gap-y-1 text-[12px]">
+                <div><dt class="muted">👍 / 👎</dt><dd class="num m-0 text-ink">{{ m.good }} / {{ m.bad }}</dd></div>
+                <div><dt class="muted">Acierto</dt><dd class="num m-0 font-semibold text-ink">{{ pct(m.good, m.bad) }}</dd></div>
+                <div><dt class="muted">Errores · límite</dt><dd class="num m-0 text-ink">{{ m.errors }} · {{ m.limitHits }}</dd></div>
+                <div><dt class="muted">Iter.</dt><dd class="num m-0 text-ink">{{ m.avgIterations }}</dd></div>
+                <div><dt class="muted">Tokens prom.</dt><dd class="num m-0 text-ink">{{ m.avgTokens }}</dd></div>
+                <div><dt class="muted">Seg. prom.</dt><dd class="num m-0 text-ink">{{ m.avgSeconds }}</dd></div>
+              </dl>
+            </li>
+          </ul>
+          <ScrollX v-else>
             <table class="hist-table">
               <thead>
                 <tr><th v-for="h in SUMMARY_HEAD" :key="h">{{ h }}</th></tr>
@@ -75,7 +116,7 @@
                 </tr>
               </tbody>
             </table>
-          </div>
+          </ScrollX>
         </section>
 
         <section v-if="summary" aria-labelledby="hist-runs">
@@ -85,14 +126,19 @@
             <li v-for="r in runs" :key="r.id" class="border-b border-line py-2.5">
               <p class="m-0 flex items-start gap-2 text-[13.5px]">
                 <span class="hist-badge" :title="r.rating === 1 ? 'Buena' : r.rating === -1 ? 'Mala' : 'Sin valorar'">{{ r.rating === 1 ? '👍' : r.rating === -1 ? '👎' : '–' }}</span>
-                <b class="min-w-0 flex-1 text-ink">{{ r.question.slice(0, 140) }}</b>
+                <b class="min-w-0 flex-1 text-ink" :class="mobile ? 'line-clamp-2' : ''">{{ r.question.slice(0, 140) }}</b>
+                <KebabMenu v-if="mobile" label="Acciones de la ejecución" :items="runActions(r)" @select="(a) => runAction(a, r)" />
               </p>
-              <p class="m-0 mt-0.5 text-[12.5px] text-ink-soft">
+              <p v-if="mobile" class="m-0 mt-0.5 pl-[38px] text-[12px] text-ink-soft">
+                {{ date(r.createdAt) }} · {{ r.model ?? '?' }} · <span :class="r.status === 'ok' ? '' : 'text-bad'">{{ r.status }}</span> · {{ (r.elapsedMs / 1000).toFixed(1) }} s
+                <template v-if="r.comment"><br>“{{ r.comment }}”</template>
+              </p>
+              <p v-else class="m-0 mt-0.5 text-[12.5px] text-ink-soft">
                 {{ date(r.createdAt) }} · {{ r.model ?? '?' }} · {{ modeLabel(r.mode) }} ·
                 <span :class="r.status === 'ok' ? '' : 'text-bad'">{{ r.status }}</span> · {{ r.iterations }} iter. · {{ r.tokens }} tokens · {{ (r.elapsedMs / 1000).toFixed(1) }} s<template v-if="r.tags?.length"> · {{ r.tags.join(', ') }}</template>
                 <template v-if="r.comment"><br>“{{ r.comment }}”</template>
               </p>
-              <div class="mt-1.5 flex flex-wrap gap-1.5">
+              <div v-if="!mobile" class="mt-1.5 flex flex-wrap gap-1.5">
                 <CopyButton label="Copiar detalle (JSON)" title="Copiar el detalle completo de la ejecución (JSON)" :text="() => detailJson(r.id)" />
                 <button type="button" class="btn py-1 text-[12.5px]" :aria-expanded="openId === r.id" @click="toggle(r.id)">
                   {{ openId === r.id ? 'Ocultar traza y log' : 'Ver traza y log' }}
@@ -144,6 +190,9 @@ import { exportRuns, getFacets, getRun, getRuns, getSummary, telemetryStatus } f
 import { turnFromRun } from '@/shared/runLog';
 import { $notify } from '@/shared/notify';
 import CopyButton from './CopyButton.vue';
+import KebabMenu from './KebabMenu.vue';
+import ScrollX from './ScrollX.vue';
+import { copyText } from '@/shared/clipboard';
 import TracePanel from './TracePanel.vue';
 import LogPanel from './LogPanel.vue';
 
@@ -159,6 +208,13 @@ const DETAIL_TABS = [{ id: 'answer', label: 'Respuesta y SQL' }, { id: 'trace', 
 const PAGE = 50;
 
 const size = computed(() => ({ width: Math.min(1100, window.innerWidth - 16), height: Math.min(860, window.innerHeight - 16) }));
+// Móvil: pantalla completa, filtros plegados, resumen en tarjetas y acciones de cada ejecución en un menú ⋯.
+const mobile = computed(() => window.innerWidth < 700);
+const filtersOpen = ref(false);
+const EXPORTS = [
+  { id: 'csv', text: 'Exportar CSV (Excel)', icon: 'fa-solid fa-file-csv' },
+  { id: 'json', text: 'Exportar JSON completo', icon: 'fa-solid fa-file-code' },
+];
 
 const status = ref({ enabled: false, lastError: null });
 const filters = reactive({ days: 30, rating: '', model: '', mode: '', status: '', q: '' });
@@ -170,6 +226,7 @@ const loading = ref(false);
 const error = ref('');
 const exporting = ref(false);
 
+const activeFilters = computed(() => ['rating', 'model', 'mode', 'status'].filter((k) => filters[k] !== '').length);
 const modelItems = computed(() => [{ value: '', text: 'todos' }, ...(facets.value?.models ?? []).map((m) => ({ value: m, text: m }))]);
 const statusItems = computed(() => [{ value: '', text: 'todos' }, ...(facets.value?.statuses ?? []).map((s) => ({ value: s, text: s }))]);
 
@@ -237,6 +294,17 @@ async function toggle(id) {
   }
 }
 const detailJson = async (id) => JSON.stringify(await fetchDetail(id), null, 2);
+const runActions = (r) => [
+  { id: 'copy', text: 'Copiar detalle (JSON)', icon: 'fa-solid fa-copy' },
+  { id: 'trace', text: openId.value === r.id ? 'Ocultar traza y log' : 'Ver traza y log', icon: 'fa-solid fa-route' },
+];
+async function runAction(action, r) {
+  if (action === 'trace') { toggle(r.id); return; }
+  try {
+    if (await copyText(await detailJson(r.id))) $notify.success('Detalle copiado al portapapeles.');
+    else $notify.error('No se pudo copiar: el navegador bloqueó el portapapeles.');
+  } catch (err) { $notify.error(err.message); }
+}
 
 async function download(format) {
   exporting.value = true;
