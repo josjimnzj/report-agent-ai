@@ -7,7 +7,7 @@ using AD.Data.Assistant.Api.Options;
 namespace AD.Data.Assistant.Api.Http;
 
 /// <summary>
-/// Protege /api/* con una API key (cabecera X-Api-Key o Authorization: Bearer).
+/// Protege /api/* con una API key (cabecera X-Api-Key o Authorization: Bearer). /api/public/* (enlaces publicados) va sin clave.
 /// Falla cerrado: sin Auth:ApiKey configurada, /api responde 503 (salvo Auth:Disabled=true, solo para desarrollo local).
 /// Limita los intentos fallidos por IP para frenar fuerza bruta.
 /// </summary>
@@ -20,7 +20,7 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, IOptions<AuthOpti
 
     public async Task InvokeAsync(HttpContext ctx)
     {
-        if (!ctx.Request.Path.StartsWithSegments("/api") || _opt.Disabled)
+        if (!ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/api/public") || _opt.Disabled)
         {
             await next(ctx);
             return;

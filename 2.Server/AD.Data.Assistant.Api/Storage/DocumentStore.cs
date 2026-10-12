@@ -30,6 +30,8 @@ public static class Collections
     public const string Conversations = "conversations";
     /// <summary>Registro de cada ejecución del agente (auditoría y costos).</summary>
     public const string Runs = "runs";
+    /// <summary>Reportes publicados con enlace; la clave es el SHA-256 del token. Solo por /api/publications.</summary>
+    public const string Publications = "publications";
 
     /// <summary>Colecciones que el front puede leer y escribir por /api/docs.</summary>
     public static readonly HashSet<string> Public = [Chats, Reports, Prefs];

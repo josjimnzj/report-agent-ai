@@ -28,7 +28,10 @@
           </div>
           <p class="m-0 mt-1 text-ink-soft" :class="narrow ? 'text-[12.5px]' : 'text-[13.5px]'">{{ description }}</p>
           <p v-if="session.reportOverride" class="no-print m-0 mt-2 flex flex-wrap items-center gap-2 text-[12.5px] text-ink-soft">
-            <span v-if="savedReport?.published" class="tag-chip tag-chip-sm"><i class="fa-solid fa-share-from-square" aria-hidden="true" /> Publicado en {{ savedReport.published.section }}</span>
+            <button v-if="savedReport?.published?.token" type="button" class="tag-chip tag-chip-sm cursor-pointer" title="Ver o cambiar el enlace público" @click="emitAction('publish')">
+              <i class="fa-solid fa-link" aria-hidden="true" /> {{ publishedLabel(savedReport.published) }}
+            </button>
+            <span v-else-if="savedReport?.published" class="tag-chip tag-chip-sm"><i class="fa-solid fa-share-from-square" aria-hidden="true" /> Publicado en {{ savedReport.published.section }}</span>
             <button type="button" class="btn py-1 text-[12.5px]" @click="$emit('edit-report', savedReport)">
               <i class="fa-solid fa-comments" aria-hidden="true" /> Editar en una conversación nueva
             </button>
@@ -258,6 +261,7 @@ import { IS_API } from '@/services/mode';
 import { TABLE_TYPE, chartTypeLabel, genericMarkdown, isSalesResult, resultDisplay } from '@/shared/resultView';
 import { fmtInt } from '@/shared/salesReport';
 import { copyText } from '@/shared/clipboard';
+import { publishedLabel } from '@/shared/publishFilters';
 
 const TABS = [
   { id: 'results', label: 'Resultados', icon: 'fa-chart-column' },
@@ -276,12 +280,12 @@ const ACTIONS = [
 ];
 const DEFAULT_TITLE = DEFAULT_REPORT_TITLE;
 const TECH_TABS = ['sql', 'json', 'trace', 'log'];
-// Con el backend real aún no existen: se muestran deshabilitadas como «próximamente».
+// Con el backend real, campaña y segmento aún no existen («próximamente»); publicar crea un enlace con token.
 const reportActions = [
   { id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn' },
   { id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' },
-  { id: 'publish', text: 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' },
-].map((a) => (IS_API ? { ...a, text: `${a.text} (próximamente)`, disabled: true } : a));
+  IS_API ? { id: 'publish', text: 'Publicar con enlace', icon: 'fa-solid fa-link' } : { id: 'publish', text: 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' },
+].map((a) => (IS_API && a.id !== 'publish' ? { ...a, text: `${a.text} (próximamente)`, disabled: true } : a));
 const emit = defineEmits(['report-action', 'edit-report']);
 const emitAction = (mode) => emit('report-action', mode, actionContext());
 
@@ -309,11 +313,14 @@ onBeforeUnmount(() => observer.disconnect());
 const result = computed(() => session.result);
 const savedReport = computed(() => (session.reportOverride ? reports.reports.find((r) => r.id === session.reportOverride.id) ?? null : null));
 
-/** Lo que reciben los diálogos de acción: el reporte tal como se ve (título, periodo, sucursales y datos). */
+/** Lo que reciben los diálogos de acción: el reporte tal como se ve (título, periodo, sucursales, datos y gráfica). */
 function actionContext() {
+  const r = result.value;
   return {
-    title: title.value, months: prefs.months, branches: result.value.branches ?? null,
-    columns: result.value.columns, rows: result.value.rows, reportId: session.reportOverride?.id ?? null, chatId: session.savedId,
+    title: title.value, months: prefs.months, branches: r.branches ?? null,
+    columns: r.columns, rows: r.rows, totalRows: r.totalRows, queries: r.queries, answer: r.answer,
+    chart: r.chart, chartType: r.chartType, chartLines: r.chartLines, showChart: r.showChart, insights: r.insights,
+    reportId: session.reportOverride?.id ?? null, chatId: session.savedId,
   };
 }
 const sales = computed(() => Boolean(result.value) && isSalesResult(result.value.columns));

@@ -49,6 +49,7 @@
   </main>
 
   <ReportActionDialog />
+  <PublishDialog v-if="IS_API" />
   <HistoryDialog v-if="IS_API" :visible="history" @close="history = false" />
   <ChatDetailsDialog
     :visible="saving"
@@ -72,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { confirm } from 'devextreme/ui/dialog';
 import { useSessionStore } from '@/stores/session';
 import { useChatsStore } from '@/stores/chats';
@@ -83,6 +84,8 @@ import ChatPanel from '@/components/ChatPanel.vue';
 import ReportPanel from '@/components/ReportPanel.vue';
 import ChatDetailsDialog from '@/components/ChatDetailsDialog.vue';
 import ReportActionDialog from '@/components/ReportActionDialog.vue';
+// Solo con el backend real: se carga aparte para no engordar el paquete principal.
+const PublishDialog = defineAsyncComponent(() => import('@/components/PublishDialog.vue'));
 import HistoryDialog from '@/components/HistoryDialog.vue';
 import { useActionsStore } from '@/stores/actions';
 import { useReportsStore } from '@/stores/reports';

@@ -8,7 +8,8 @@ El front tiene dos modos, elegidos con `VITE_DATA_MODE` al compilar:
   - Las respuestas vienen del agente propio (Claude + MCP de SQL Server) por SSE.
   - Chats, reportes y preferencias se guardan en Neon por `/api/docs`.
   - El panel de resultados se adapta a cualquier resultado: respuesta, gráfica sugerida o deducida, tabla y SQL. El tablero de ventas (KPI, insights) aparece solo cuando el resultado tiene la forma de ventas por mes y sucursal.
-  - Campañas, segmentos y publicar en el menú se ven como «próximamente».
+  - **Publicar con enlace** crea un enlace público con token y caducidad (`/p/{token}`), con filtros sugeridos (fechas primero). Ver «Publicar con enlace».
+  - Campañas y segmentos se ven como «próximamente».
 - **`mock` (por defecto): maqueta con datos en duro.**
   - `src/services/dataAgentApi.mock.js` imita el SSE.
   - Todo se guarda en localStorage.
@@ -18,6 +19,7 @@ El front tiene dos modos, elegidos con `VITE_DATA_MODE` al compilar:
 | `VITE_DATA_MODE` | `api` o `mock` |
 | `VITE_DATA_API_URL` | URL del backend (también acepta solo el host o `/agent` con el proxy de Vite) |
 | `VITE_DATA_API_KEY` | Clave `Auth__ApiKey` del backend. Queda dentro del bundle, así que solo es aceptable detrás de la sesión del CEM |
+| `VITE_PUBLIC_URL` | Opcional. Dónde se abren los enlaces publicados. Por defecto, el dominio de `VITE_DATA_API_URL` si es una URL completa (la imagen de Docker sirve la SPA ahí) o, si no, este mismo front |
 
 ## Uso
 
@@ -121,6 +123,18 @@ test/             salesReport.test.js, persist.test.js, tags.test.js, models.tes
   - Generar Markdown: descarga un `.md`.
   - Compartir: copia el resumen en Markdown al portapapeles.
 
+## Publicar con enlace (modo API)
+
+Desde «Acciones › Publicar con enlace» en Resultados o desde el «⋯» de un reporte guardado.
+
+- **Al publicar** se eligen el título, la validez (7, 30 o 90 días, 1 año o hasta una fecha) y los filtros que tendrá quien abra el enlace. `suggestFilters` (`src/shared/publishFilters.js`) propone:
+  - columnas de **fecha** (AAAA-MM o AAAA-MM-DD) y de **año**, marcadas, con un periodo inicial opcional (todo, últimos 3, 6 o 12 meses, último año natural);
+  - **listas** de texto con 2 a 100 valores (marcadas las dos primeras con 30 valores o menos);
+  - **rangos** numéricos, sin marcar.
+- Si el resultado no estaba guardado, se guarda como reporte. El enlace queda en el reporte (`published`): el menú lateral muestra «Enlace público · hasta …» y permite copiarlo; el diálogo permite prolongar la validez, cambiar los filtros (mismo enlace) o revocarlo.
+- **Quien abre el enlace** (`src/views/PublicReportView.vue`, sin API key) ve el título, la fecha de los datos y la caducidad. Puede filtrar por periodo (rápido o rango personalizado), listas y rangos; cambiar el tipo de gráfica y las líneas de referencia; y ver la tabla (con exportación a Excel) y los insights. Los periodos «últimos N meses» se cuentan desde la fecha más reciente de los datos publicados.
+- Se publica una **copia** de los datos (no se vuelve a consultar la base) y nunca el SQL ni la conversación.
+
 ## Diferencias con la imagen de referencia
 
 - **Cifras.** La imagen tiene cifras que no cuadran entre sí: el KPI total, la tabla, el total de abril y los porcentajes de la dona. Aquí todas las cifras se calculan a partir de una sola tabla (`src/mocks/salesByBranch.js`), así que los KPI, las gráficas, la tabla, la dona, los insights y el Markdown siempre coinciden. Por eso los importes difieren de la imagen.
@@ -129,6 +143,6 @@ test/             salesReport.test.js, persist.test.js, tags.test.js, models.tes
 
 ## Pendiente
 
-- Campañas, segmentos y publicar en el menú con backend real. Hoy solo existen en modo maqueta.
+- Campañas y segmentos con backend real. Hoy solo existen en modo maqueta.
 - Usuario real de la sesión del CEM. Hoy todo pertenece a `admin`.
 - Traza y Log del agente en el front, máximo de iteraciones configurable y valoración 👍/👎.

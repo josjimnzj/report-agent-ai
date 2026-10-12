@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.RateLimiting;
 using AD.Data.Assistant.Api;
 using AD.Data.Assistant.Api.Agent;
 using AD.Data.Assistant.Api.Http;
@@ -40,10 +41,17 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 {
     if (corsOrigins.Length == 0) return;
     if (corsOrigins.Contains("*")) p.AllowAnyOrigin(); else p.WithOrigins(corsOrigins);
-    p.WithHeaders("Content-Type", "X-Api-Key", "Authorization").WithMethods("GET", "POST", "PUT", "DELETE").SetPreflightMaxAge(TimeSpan.FromHours(1));
+    p.WithHeaders("Content-Type", "X-Api-Key", "Authorization").WithMethods("GET", "POST", "PUT", "PATCH", "DELETE").SetPreflightMaxAge(TimeSpan.FromHours(1));
 }));
 
 builder.Services.AddSingleton(TimeProvider.System);
+// Enlaces públicos de reportes: 60 lecturas por minuto e IP.
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.AddPolicy(Publications.RateLimitPolicy, ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "?", _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));
+});
 builder.Services.AddSingleton<IDocumentStore>(sp =>
 {
     var opt = sp.GetRequiredService<IOptions<StorageOptions>>();
@@ -89,6 +97,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 // El enrutado va después de los estáticos: si no, el fallback de la SPA captura también /assets.
 app.UseRouting();
+app.UseRateLimiter();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
 app.Use(async (ctx, next) =>
 {
@@ -195,6 +204,9 @@ app.MapPut("/api/docs/{collection}/{id}", async (string collection, string id, H
 
 app.MapDelete("/api/docs/{collection}/{id}", async (string collection, string id, IDocumentStore store, CancellationToken ct) =>
     CheckDoc(collection, id) ?? (await store.DeleteAsync(collection, id, ct) ? Results.NoContent() : Results.NotFound()));
+
+// --- Reportes publicados con enlace (token y caducidad) ---
+app.MapPublications();
 
 // --- Telemetría: registro y valoración de ejecuciones (base aparte) ---
 IResult TelemetryOff() => Results.Json(new { error = "La telemetría no está configurada (Telemetry__ConnectionString)." }, statusCode: 503);

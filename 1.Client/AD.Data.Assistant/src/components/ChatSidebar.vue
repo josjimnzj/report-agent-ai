@@ -140,7 +140,10 @@
               <i class="fa-solid w-4 text-center text-[15px]" :class="KIND[r.kind]?.icon ?? 'fa-file'" :style="{ color: KIND[r.kind]?.color }" aria-hidden="true" />
               <span class="min-w-0 flex-1">
                 <span class="block truncate">{{ r.title }}</span>
-                <span v-if="r.published" class="mt-0.5 flex items-center gap-1 text-[11px] font-normal text-good">
+                <span v-if="r.published?.token" class="mt-0.5 flex items-center gap-1 text-[11px] font-normal" :class="r.published.expiresAt > Date.now() ? 'text-good' : 'text-ink-muted'">
+                  <i class="fa-solid fa-link" aria-hidden="true" /> {{ publishedLabel(r.published) }}
+                </span>
+                <span v-else-if="r.published" class="mt-0.5 flex items-center gap-1 text-[11px] font-normal text-good">
                   <i class="fa-solid fa-share-from-square" aria-hidden="true" /> Publicado en {{ r.published.section }}
                 </span>
               </span>
@@ -245,6 +248,9 @@ import { useActionsStore } from '@/stores/actions';
 import { $notify } from '@/shared/notify';
 import { fmtInt } from '@/shared/salesReport';
 import { channelLabel } from '@/shared/reportActions';
+import { publishedLabel } from '@/shared/publishFilters';
+import { publicUrl } from '@/services/publicationsApi';
+import { copyText } from '@/shared/clipboard';
 import { SALES_COLUMNS, SALES_ROWS } from '@/mocks/salesByBranch';
 import ChatDetailsDialog from './ChatDetailsDialog.vue';
 import KebabMenu from './KebabMenu.vue';
@@ -285,14 +291,18 @@ const chatMenu = (c) => [
   { id: 'edit', text: 'Editar título y etiquetas', icon: 'fa-solid fa-pen' },
   { id: 'delete', text: 'Eliminar', icon: 'fa-solid fa-trash', danger: true },
 ];
-// Campañas, segmentos y publicación aún no existen en el backend real: se ven como «próximamente».
+// Campañas y segmentos aún no existen en el backend real: se ven como «próximamente».
+// Con el backend real, publicar crea un enlace con token y caducidad.
 const soon = (item) => (IS_API ? { ...item, text: `${item.text} (próximamente)`, disabled: true } : item);
 const reportMenu = (r) => [
   { id: 'open', text: 'Abrir', icon: 'fa-solid fa-chart-column' },
   { id: 'edit-chat', text: 'Editar en conversación nueva', icon: 'fa-solid fa-comments' },
   soon({ id: 'campaign', text: 'Disparar campaña', icon: 'fa-solid fa-bullhorn', beginGroup: true }),
   soon({ id: 'segment', text: 'Crear segmento', icon: 'fa-solid fa-users' }),
-  soon({ id: 'publish', text: r.published ? 'Cambiar publicación' : 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' }),
+  IS_API
+    ? { id: 'publish', text: r.published?.token ? 'Enlace público…' : 'Publicar con enlace', icon: 'fa-solid fa-link' }
+    : { id: 'publish', text: r.published ? 'Cambiar publicación' : 'Publicar en el menú', icon: 'fa-solid fa-share-from-square' },
+  { id: 'copy-link', text: 'Copiar enlace', icon: 'fa-solid fa-copy', visible: IS_API && Boolean(r.published?.token) && r.published.expiresAt > Date.now() },
   { id: 'unpublish', text: 'Quitar del menú', icon: 'fa-solid fa-eye-slash', visible: Boolean(r.published) && !IS_API },
   { id: 'rename', text: 'Renombrar', icon: 'fa-solid fa-pen', beginGroup: true },
   { id: 'delete', text: 'Eliminar', icon: 'fa-solid fa-trash', danger: true },
@@ -332,6 +342,8 @@ function onReportAction(action, r) {
   else if (['campaign', 'segment', 'publish'].includes(action)) {
     const data = session.savedReportData(r);
     if (data) emit('report-action', action, { ...data, title: r.title });
+  } else if (action === 'copy-link') {
+    copyText(publicUrl(r.published.token)).then((ok) => (ok ? $notify.success('Enlace copiado.') : $notify.error('El navegador bloqueó el portapapeles.')));
   } else if (action === 'unpublish') {
     reports.unpublish(r.id);
     $notify.info(`«${r.title}» ya no aparece en el menú (simulado).`);

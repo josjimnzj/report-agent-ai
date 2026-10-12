@@ -5,6 +5,8 @@ import { newId } from '@/shared/ids';
 import { safeStorage } from './storage';
 import { IS_API } from '@/services/mode';
 import { docsApi } from '@/services/docsApi';
+import { publicationsApi } from '@/services/publicationsApi';
+import { $notify } from '@/shared/notify';
 import { MAX_SAVED_ROWS } from '@/shared/persist';
 
 const defaults = () => ({ version: SCHEMA_VERSION, reports: IS_API ? [] : structuredClone(SEED_REPORTS) });
@@ -45,8 +47,22 @@ export const useReportsStore = defineStore('reports', {
       const r = find(this, id);
       if (r) { r.published = null; docsApi.save('reports', r); }
     },
+    /**
+     * Modo API: enlace público del reporte, o null al revocarlo.
+     * { id, token, expiresAt (ms), title, filters, at }. El token se guarda para volver a copiar el enlace.
+     */
+    setPublished(id, published) {
+      const r = find(this, id);
+      if (r) { r.published = published; docsApi.save('reports', r); }
+    },
     remove(id) {
-      this.reports = this.reports.filter((r) => r.id !== id);
+      const r = find(this, id);
+      // Borrar el reporte revoca su enlace público: no queda una copia accesible sin dueño visible.
+      if (r?.published?.token) {
+        const until = new Date(r.published.expiresAt).toLocaleDateString('es-MX');
+        publicationsApi.revoke(r.published.id).catch((err) => $notify.error(`No se pudo revocar el enlace público (seguirá activo hasta el ${until}): ${err.message}`));
+      }
+      this.reports = this.reports.filter((x) => x.id !== id);
       docsApi.remove('reports', id);
     },
     /** Modo API: carga los reportes guardados en Neon. */

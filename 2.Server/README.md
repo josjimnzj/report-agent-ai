@@ -48,12 +48,32 @@ Una tabla JSONB, `ada_documents (owner, collection, id, data, created_at, update
 | `chats` | conversaciones guardadas del front (con etiquetas y resultados, máximo 500 filas por turno) | `/api/docs/chats` |
 | `reports` | reportes guardados con una copia del resultado | `/api/docs/reports` |
 | `prefs` | preferencias (modelo, esfuerzo, menú…) | `/api/docs/prefs` |
+| `publications` | reportes publicados con enlace (clave = SHA-256 del token) | `/api/publications` |
 | `conversations` | historial del agente para las preguntas de seguimiento | — |
 | `runs` | registro de ejecuciones | — |
 
 `GET /api/docs/{colección}`, `GET|PUT|DELETE /api/docs/{colección}/{id}`. Si no se configura `DATABASE_URL`, se usa memoria; solo sirve para desarrollo y se pierde al reiniciar.
 
-Campañas, segmentos y publicar en el menú **aún no tienen backend**. En el front aparecen como «próximamente».
+Campañas y segmentos **aún no tienen backend**. En el front aparecen como «próximamente».
+
+## Reportes publicados (enlace con token)
+
+Publicar un reporte genera un enlace `…/p/{token}` que se abre **sin iniciar sesión** hasta que caduca o se revoca. Se guarda en la colección `publications` (solo por `/api/publications`).
+
+- **Qué se publica.** Una copia del resultado en el momento de publicar: `columns`, `rows` (máx. 5000), `totalRows`, `chart`, `chartType`, `chartLines` e `insights`. El servidor descarta todo lo demás: **no se publican el SQL (`queries`), la respuesta del chat ni la traza**. El enlace no vuelve a consultar SQL Server.
+- **Token.** 256 bits aleatorios (base64url). En Neon se guarda solo su SHA-256 como `id`; el token sale una única vez en la respuesta de `POST` y el front lo guarda en el reporte (`published.token`) para volver a copiar el enlace.
+- **Caducidad.** Obligatoria: de 5 minutos a 365 días (30 por defecto). Un enlace caducado responde `410`; uno revocado o inexistente, `404`.
+- **Filtros.** Hasta 6, por columna del resultado: `date` (periodo; `default: { preset: all|last3|last6|last12|ytd }`), `select` (lista de valores) y `range` (mínimo y máximo). Se aplican en el navegador de quien abre el enlace. Al publicar, el front sugiere las columnas de fecha (y de año) y hasta dos listas cortas.
+- **Protección.** `/api/public/*` no exige API key, admite 60 lecturas por minuto e IP y responde con `Cache-Control: no-store`, `X-Robots-Tag: noindex` y `Referrer-Policy: no-referrer`.
+
+| Endpoint | Uso |
+|---|---|
+| `POST /api/publications` | `{ reportId, title, expiresAt, filters[], result }` → `{ id, token, path, expiresAt }` |
+| `PATCH /api/publications/{id}` | Cambia `title`, `expiresAt` o `filters` sin cambiar el enlace (también reactiva uno caducado) |
+| `DELETE /api/publications/{id}` | Revoca el enlace. Borrar el reporte desde el front también lo revoca |
+| `GET /api/public/reports/{token}` | Sin clave: `{ title, publishedAt, expiresAt, filters, result }` |
+
+Cuando haya varios usuarios, la lectura pública tendrá que buscar el token sin filtrar por `owner` (hoy todo es de `admin`).
 
 ## Configuración
 

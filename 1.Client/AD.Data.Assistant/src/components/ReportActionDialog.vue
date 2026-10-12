@@ -137,6 +137,7 @@ import { confirm } from 'devextreme/ui/dialog';
 import { useActionsStore } from '@/stores/actions';
 import { useReportsStore } from '@/stores/reports';
 import { $notify } from '@/shared/notify';
+import { IS_API } from '@/services/mode';
 import { PERIODS, fmtInt } from '@/shared/salesReport';
 import {
   AUDIENCES, CHANNELS, MENU_SECTIONS, SEGMENT_CRITERIA, audienceLabel, channelLabel, criterionLabel, describeScope, segmentSize,
@@ -167,7 +168,8 @@ const uid = Math.random().toString(36).slice(2, 8);
 const ids = Object.fromEntries(['name', 'branches', 'months', 'desc', 'segment', 'start', 'section'].map((k) => [k, `rad-${k}-${uid}`]));
 const popupWidth = computed(() => Math.min(540, window.innerWidth - 24));
 
-const dialog = computed(() => actions.dialog);
+// Con el backend real, publicar va por PublishDialog (enlace con token).
+const dialog = computed(() => (IS_API && actions.dialog?.mode === 'publish' ? null : actions.dialog));
 const mode = computed(() => dialog.value?.mode ?? 'segment');
 const ctx = computed(() => dialog.value?.context ?? null);
 

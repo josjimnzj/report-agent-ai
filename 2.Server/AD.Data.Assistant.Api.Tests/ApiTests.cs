@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace AD.Data.Assistant.Api.Tests;
 
+// Las pruebas que arrancan la API van en serie: TolerantBinder.Errors es estático y otro host en paralelo lo cambia.
+[Collection("api")]
 public class ApiTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
 {
     private HttpClient Client(string? key = "test-key", string telemetry = "")
