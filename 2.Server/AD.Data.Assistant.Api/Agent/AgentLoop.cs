@@ -160,7 +160,7 @@ public sealed class AgentLoop(AnthropicClient client, IOptions<AnthropicOptions>
                 Effort = ParseEffort(settings.Effort),
                 Format = jsonSchema is null ? null : new BetaJsonOutputFormat { Schema = jsonSchema.ToDictionary() },
             },
-            Tools = tools.ToList(),
+            Tools = tools.Count > 0 ? tools.ToList() : null,
             Messages = messages,
         };
         if (settings.Fallback is { } fb)

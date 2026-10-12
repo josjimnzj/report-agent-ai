@@ -62,6 +62,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<TelemetryStore>())
 builder.Services.AddSingleton<SqlMcpClient>();
 builder.Services.AddSingleton<ModelCatalog>();
 builder.Services.AddSingleton<PromptStore>();
+builder.Services.AddSingleton(sp => BusinessDictionary.Load(sp.GetRequiredService<IOptions<SqlMcpOptions>>(), sp.GetRequiredService<ILogger<BusinessDictionary>>()));
 builder.Services.AddSingleton<AgentLoop>();
 builder.Services.AddSingleton<DataAgent>();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);

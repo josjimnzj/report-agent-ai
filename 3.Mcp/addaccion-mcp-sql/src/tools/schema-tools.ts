@@ -141,6 +141,8 @@ export class SchemaDescribeTool extends SchemaGraphTool {
       primaryKey: t.columns.filter(c => c.isPk).map(c => c.name),
       columns: shown.map(c => ({
         name: c.name, type: c.type, nullable: c.nullable, pk: c.isPk ? true : null, identity: c.isIdentity ? true : null, description: c.description,
+        // Nombres de negocio de la columna: los que el agente usa al responder en lugar del nombre técnico.
+        aliases: c.aliases.length > 0 ? c.aliases : null,
       })),
       columnsOmitted: colList.length - shown.length > 0 ? colList.length - shown.length : null,
       references: neighbors.filter(n => n.outgoing).slice(0, 40)

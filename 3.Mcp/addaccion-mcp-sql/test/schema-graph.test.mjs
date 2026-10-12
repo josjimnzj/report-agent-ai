@@ -70,6 +70,7 @@ test('schema tools return JSON', async () => {
   const describe = JSON.parse(await tool(SchemaDescribeTool).execute({ table: 'AD_Account', column_filter: 'Account' }));
   assert.equal(describe.found, true);
   assert.ok(describe.columns.length > 0);
+  assert.ok(describe.columns.find(c => c.name === 'AccountId').aliases.includes('cliente'));
   const rel = graph.data.relations.find(r => r.kind === 'declared' && r.from !== r.to);
   const path = JSON.parse(await tool(SchemaPathTool).execute({ from_table: rel.from, to_table: rel.to }));
   assert.equal(path.found, true);

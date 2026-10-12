@@ -29,6 +29,16 @@ Backend del asistente de datos: **agente propio** (Claude, Anthropic SDK para .N
 - El prompt de sistema se cachea; la fecha de hoy va en el mensaje para no romper la caché.
 - El fallback usa el parámetro beta `fallbacks` del servidor (`server-side-fallback-2026-06-01`). Se desactiva con `Anthropic__ServerFallbacks=false`.
 
+## Lenguaje de negocio (guardarraíl)
+
+El texto que lee el usuario (`answer`, `insights` y etiquetas de líneas de referencia) no muestra nombres de tablas, columnas, esquemas ni códigos internos. Va en el idioma de la pregunta y con los nombres de negocio del diccionario (glosario, `aliases` y `description` del grafo del MCP). El SQL, la traza, el log en vivo y la telemetría conservan los nombres técnicos.
+
+1. **Prompt.** Exige términos de negocio y alias de columnas en el idioma de la pregunta. `schema_describe` devuelve los `aliases` de cada columna.
+2. **Detección en el servidor.** `TechnicalTermGuard` busca identificadores técnicos con dos criterios. Siempre cuentan `dbo.…` y los nombres con guion bajo (`AD_Case`). Los CamelCase (`EstimatedAmount`) solo cuentan si están en el diccionario o en el SQL ejecutado. No se tocan los alias del resultado ni los valores de sus filas.
+3. **Reescritura.** Si encuentra alguno, el modelo reescribe una vez esos textos (sin herramientas, esfuerzo `low`) con el nombre de negocio y la descripción de cada término. Lo que quede se sustituye en el servidor por el alias del diccionario o por el nombre separado en palabras. Cada caso queda en el log como `Guardarraíl <runId>`.
+
+El diccionario se lee de `SqlMcp__ExtraEnv__SCHEMA_GRAPH_PATH` o, por defecto, de `data/schema-graph.addaccion.json` junto al MCP. Si no existe, la detección usa solo los patrones y el SQL.
+
 ## Almacenamiento (Neon)
 
 Una tabla JSONB, `ada_documents (owner, collection, id, data, created_at, updated_at)`, que se crea sola al arrancar. Por ahora el dueño de todo es `admin` (`Storage__Owner`).

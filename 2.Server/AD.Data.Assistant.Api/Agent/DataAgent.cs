@@ -16,7 +16,8 @@ public sealed class PromptStore
 /// Agente de consulta de datos: arma el historial de la conversación (guardado en Neon), ejecuta el bucle con las
 /// herramientas del MCP, captura en el servidor los resultados reales de execute_query y registra la ejecución.
 /// </summary>
-public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog catalog, IDocumentStore store, PromptStore prompts, TelemetryStore telemetry, TimeProvider time, ILogger<DataAgent> log)
+public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog catalog, IDocumentStore store, PromptStore prompts, TelemetryStore telemetry,
+    BusinessDictionary dictionary, TimeProvider time, ILogger<DataAgent> log)
 {
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -93,6 +94,33 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
     }
     """).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
 
+    /// <summary>Reescritura de los textos para el usuario cuando el guardarraíl encuentra nombres técnicos.</summary>
+    private const string RewritePrompt = """
+        Corriges los textos que leerá un usuario de negocio sobre un resultado de datos. Reescribe `answer`, cada `title` y `text` de `insights` y cada `refLabels` quitando todo nombre técnico de la base de datos (tablas, columnas, esquemas, códigos internos, SQL o nombres de herramientas). Sustituye cada uno por su nombre de negocio (`businessName`) o una interpretación breve de su `description`, traducidos al idioma de la pregunta. Si un término no aporta nada al usuario, quítalo y ajusta la frase.
+        No cambies cifras, hechos, conclusiones, el idioma de la pregunta, el orden ni la cantidad de elementos. Devuelve solo el JSON pedido.
+        """;
+
+    private static readonly IReadOnlyDictionary<string, JsonElement> RewriteSchema = JsonDocument.Parse("""
+    {
+      "type": "object",
+      "properties": {
+        "answer": { "type": "string" },
+        "insights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "title": { "type": "string" }, "text": { "type": "string" } },
+            "required": ["title", "text"],
+            "additionalProperties": false
+          }
+        },
+        "refLabels": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["answer", "insights", "refLabels"],
+      "additionalProperties": false
+    }
+    """).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
+
     public async Task<QueryResponse> AskAsync(QueryRequest req, EmitAsync emit, CancellationToken ct)
     {
         var question = req.Question?.Trim() ?? "";
@@ -125,18 +153,22 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
                 AnswerSchema, settings, tracked, ct);
 
             QueryResponse response;
+            var queries = results.Select(r => r.Sql).Concat(run.Trace.Where(t => t.Tool == "execute_query").Select(t => QueryOf(t.Input))).ToList();
             if (run.StopReason == "max_iterations")
             {
                 var last = results.LastOrDefault();
-                response = Build(conversationId, runId, "max_iterations", run, settings, sw.ElapsedMilliseconds,
-                    string.IsNullOrWhiteSpace(run.FinalText) ? $"El agente usó las {maxIter} iteraciones permitidas sin terminar. Puedes reformular la pregunta o subir el esfuerzo." : run.FinalText,
+                var guard = new TechnicalTermGuard.Context(dictionary, queries, last?.Columns ?? [], last?.Rows);
+                response = Build(conversationId, runId, "max_iterations", run, run.Usage, settings, sw.ElapsedMilliseconds,
+                    string.IsNullOrWhiteSpace(run.FinalText) ? $"El agente usó las {maxIter} iteraciones permitidas sin terminar. Puedes reformular la pregunta o subir el esfuerzo." : TechnicalTermGuard.Scrub(run.FinalText, guard),
                     last, results, null, null);
             }
             else
             {
                 var parts = ApplyDisplayRules(ParseAnswer(run.FinalText), question);
                 var main = parts.ResultQuery >= 1 && parts.ResultQuery <= results.Count ? results[parts.ResultQuery - 1] : null;
-                response = Build(conversationId, runId, "ok", run, settings, sw.ElapsedMilliseconds, parts.Answer, main, results, parts.Chart, parts);
+                var guard = new TechnicalTermGuard.Context(dictionary, queries, main?.Columns ?? [], main?.Rows);
+                var (clean, usage) = await GuardAsync(parts, question, guard, settings, emit, runId, run.Usage, ct);
+                response = Build(conversationId, runId, "ok", run, usage, settings, sw.ElapsedMilliseconds, clean.Answer, main, results, clean.Chart, clean);
             }
 
             await SaveTurnAsync(conv, settings.Model, question, response, ct);
@@ -153,10 +185,82 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         }
     }
 
-    private static QueryResponse Build(string conversationId, string runId, string status, AgentRunResult run, RunSettings settings, long ms,
+    /// <summary>
+    /// Guardarraíl: si el texto para el usuario trae nombres técnicos de la base, el modelo lo reescribe una vez con el
+    /// diccionario de negocio; lo que quede se sustituye en el servidor. El SQL y la traza no se tocan.
+    /// </summary>
+    private async Task<(AnswerParts Parts, UsageInfo Usage)> GuardAsync(AnswerParts parts, string question, TechnicalTermGuard.Context guard,
+        RunSettings settings, EmitAsync emit, string runId, UsageInfo usage, CancellationToken ct)
+    {
+        var leaks = TechnicalTermGuard.Find(parts, guard);
+        if (leaks.Count == 0) return (parts, usage);
+        log.LogWarning("Guardarraíl {RunId}: la respuesta mencionaba nombres técnicos ({Terms}); se reescribe.", runId, string.Join(", ", leaks));
+        await emit(new AgentEvent("status", new { message = "Ajustando la respuesta a lenguaje de negocio…" }));
+
+        try
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                question,
+                technicalTerms = TechnicalTermGuard.Describe(leaks, guard.Dictionary),
+                texts = new
+                {
+                    answer = parts.Answer,
+                    insights = (parts.Insights ?? []).Select(i => new { title = i.Title, text = i.Text }),
+                    refLabels = (parts.Chart?.RefLines ?? []).Select(l => l.Label),
+                },
+            }, Json);
+            var rewrite = await loop.RunAsync(RewritePrompt, [new BetaMessageParam { Role = Role.User, Content = payload }], [], 1,
+                (_, _) => Task.FromResult(new ToolOutcome("Sin herramientas.", true)), RewriteSchema, settings with { Effort = "low" }, emit, ct);
+            parts = ApplyRewrite(parts, rewrite.FinalText);
+            usage = new UsageInfo(usage.InputTokens + rewrite.Usage.InputTokens, usage.OutputTokens + rewrite.Usage.OutputTokens,
+                usage.CacheReadTokens + rewrite.Usage.CacheReadTokens, usage.CacheCreationTokens + rewrite.Usage.CacheCreationTokens);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "Guardarraíl {RunId}: la reescritura falló; se sustituyen los nombres en el servidor.", runId);
+        }
+
+        var remaining = TechnicalTermGuard.Find(parts, guard);
+        if (remaining.Count > 0)
+            log.LogWarning("Guardarraíl {RunId}: se sustituyen en el servidor ({Terms}).", runId, string.Join(", ", remaining));
+        return (TechnicalTermGuard.Scrub(parts, guard), usage);
+    }
+
+    /// <summary>Aplica los textos reescritos por posición; lo que falte o venga vacío conserva el original.</summary>
+    internal static AnswerParts ApplyRewrite(AnswerParts parts, string json)
+    {
+        var t = json.Trim();
+        var i = t.IndexOf('{'); var j = t.LastIndexOf('}');
+        if (i < 0 || j <= i) return parts;
+        try
+        {
+            using var doc = JsonDocument.Parse(t[i..(j + 1)]);
+            var root = doc.RootElement;
+            static string? Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : null;
+            List<JsonElement> Arr(string name) => root.TryGetProperty(name, out var a) && a.ValueKind == JsonValueKind.Array ? a.EnumerateArray().ToList() : [];
+            var ins = Arr("insights");
+            var labels = Arr("refLabels");
+            return parts with
+            {
+                Answer = Str(root, "answer") ?? parts.Answer,
+                Insights = parts.Insights?.Select((x, k) => k < ins.Count && ins[k].ValueKind == JsonValueKind.Object
+                    ? x with { Title = Str(ins[k], "title") ?? x.Title, Text = Str(ins[k], "text") ?? x.Text } : x).ToList(),
+                Chart = parts.Chart is { RefLines: { Count: > 0 } lines } chart
+                    ? chart with { RefLines = lines.Select((l, k) => k < labels.Count && labels[k].ValueKind == JsonValueKind.String && labels[k].GetString() is { Length: > 0 } s ? l with { Label = s } : l).ToList() }
+                    : parts.Chart,
+            };
+        }
+        catch (JsonException) { return parts; }
+    }
+
+    private static string QueryOf(JsonElement input) =>
+        input.ValueKind == JsonValueKind.Object && input.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String ? q.GetString() ?? "" : "";
+
+    private static QueryResponse Build(string conversationId, string runId, string status, AgentRunResult run, UsageInfo usage, RunSettings settings, long ms,
         string answer, QueryResult? main, List<QueryResult> results, ChartHint? chart, AnswerParts? parts) =>
         new(conversationId, status, run.Iterations, answer,
-            main?.Columns ?? [], main?.Rows ?? [], results.Select(r => r.Sql).ToList(), run.Trace, run.Usage, ms,
+            main?.Columns ?? [], main?.Rows ?? [], results.Select(r => r.Sql).ToList(), run.Trace, usage, ms,
             runId, settings.Model, settings.Effort, run.ServedBy, chart, main?.RowCount ?? 0,
             AskChart: parts?.AskChart ?? false, OpenReport: parts?.OpenReport ?? false, ShowChart: parts?.ShowChart ?? true,
             Display: parts?.Display ?? "chart", ReusePrevious: parts?.ReusePrevious ?? false, Insights: parts?.Insights ?? []);
