@@ -59,7 +59,7 @@ Campañas, segmentos y publicar en el menú **aún no tienen backend**. En el fr
 | `Telemetry__ConnectionString` | Opcional. Postgres **aparte** (otra base u otra cadena de Neon) para la telemetría. Sin valor, la telemetría está apagada |
 | `Telemetry__RetentionDays` / `__RowSample` / `__MaxEventBytes` / `__MaxToolResultChars` | Retención (90 días para ejecuciones sin valoración), filas de muestra (20) y recortes del log |
 
-`GET /health` informa el almacenamiento (`neon` o `memory`), si Neon dio error al arrancar, si hay clave de Anthropic y si la telemetría está activa.
+`GET /health` informa el almacenamiento (`neon` o `memory`), si Neon dio error al arrancar, si hay clave de Anthropic, si la telemetría está activa y `configErrors`: variables con un valor que no se puede convertir (p. ej. `Anthropic__MaxTokens=64k`). Esas variables se ignoran y se usa el valor por defecto, en lugar de tumbar `/health` y `/api/models` con un 500. Los booleanos aceptan `true/false`, `1/0`, `yes/no`, `si/no` y `on/off`.
 
 ## Telemetría
 
