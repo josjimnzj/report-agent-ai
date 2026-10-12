@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // Solo se usa cuando VITE_DATA_MODE=api (fase 3). Sin buffer para no cortar el SSE.
         '/agent': {
-          target: env.VITE_DATA_API_TARGET || 'https://workflow-agent-api.onrender.com',
+          target: env.VITE_DATA_API_TARGET || 'https://report-agent-ai.onrender.com',
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/agent/, ''),
         },
