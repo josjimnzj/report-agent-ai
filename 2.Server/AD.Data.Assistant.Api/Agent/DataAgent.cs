@@ -141,6 +141,19 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         {
             await phases.SetAsync("interpret", "Interpretando tu consulta");
             var conv = await LoadConversationAsync(conversationId, ct);
+
+            // Guardarraíl de contacto: sin permiso para teléfonos, direcciones ni correos; ni siquiera se consulta la base.
+            if (ContactDataGuard.IsRequest(question))
+            {
+                log.LogWarning("Guardarraíl {RunId}: solicitud de datos de contacto bloqueada.", runId);
+                var blocked = Blocked(conversationId, runId, ContactDataGuard.Message(question), settings, sw.ElapsedMilliseconds);
+                await SaveTurnAsync(conv, settings.Model, question, blocked, ct);
+                await SaveRunAsync(runId, conversationId, question, settings, blocked, null, ct);
+                if (recorder is not null) telemetry.Enqueue(recorder.Complete(blocked));
+                return blocked;
+            }
+
+            var rowLimit = RowLimitGuard.LimitFor(question);
             var tools = (await mcp.ListToolsAsync(ct)).Select(ToolMapper.FromMcp).ToList();
 
             var messages = BuildMessages(conv, question, time.GetLocalNow());
@@ -149,7 +162,7 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
 
             var run = await loop.RunAsync(
                 prompts.DataAnalyst, messages, tools, maxIter,
-                (tc, c) => ExecuteToolAsync(tc, results, c),
+                (tc, c) => ExecuteToolAsync(tc, results, rowLimit, c),
                 AnswerSchema, settings, tracked, ct);
 
             QueryResponse response;
@@ -159,7 +172,7 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
                 var last = results.LastOrDefault();
                 var guard = new TechnicalTermGuard.Context(dictionary, queries, last?.Columns ?? [], last?.Rows);
                 response = Build(conversationId, runId, "max_iterations", run, run.Usage, settings, sw.ElapsedMilliseconds,
-                    string.IsNullOrWhiteSpace(run.FinalText) ? $"El agente usó las {maxIter} iteraciones permitidas sin terminar. Puedes reformular la pregunta o subir el esfuerzo." : TechnicalTermGuard.Scrub(run.FinalText, guard),
+                    string.IsNullOrWhiteSpace(run.FinalText) ? $"El agente usó las {maxIter} iteraciones permitidas sin terminar. Puedes reformular la pregunta o subir el esfuerzo." : LimitationGuard.Sanitize(TechnicalTermGuard.Scrub(run.FinalText, guard), question),
                     last, results, null, null);
             }
             else
@@ -168,7 +181,16 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
                 var main = parts.ResultQuery >= 1 && parts.ResultQuery <= results.Count ? results[parts.ResultQuery - 1] : null;
                 var guard = new TechnicalTermGuard.Context(dictionary, queries, main?.Columns ?? [], main?.Rows);
                 var (clean, usage) = await GuardAsync(parts, question, guard, settings, emit, runId, run.Usage, ct);
-                response = Build(conversationId, runId, "ok", run, usage, settings, sw.ElapsedMilliseconds, clean.Answer, main, results, clean.Chart, clean);
+                var answer = LimitationGuard.Sanitize(clean.Answer, question);
+                if (RowLimitGuard.IsTruncated(main, rowLimit)) answer = $"{answer} {RowLimitGuard.Note(rowLimit, question)}".Trim();
+                response = Build(conversationId, runId, "ok", run, usage, settings, sw.ElapsedMilliseconds, answer, main, results, clean.Chart, clean);
+            }
+
+            // Guardarraíl de contacto, segunda línea: si algún resultado trae teléfonos, direcciones o correos, no sale ningún dato.
+            if (ContactDataGuard.HasContactColumns(results))
+            {
+                log.LogWarning("Guardarraíl {RunId}: un resultado traía columnas de contacto; se bloquea la respuesta.", runId);
+                response = Blocked(conversationId, runId, ContactDataGuard.Message(question), settings, sw.ElapsedMilliseconds) with { Iterations = response.Iterations, Usage = response.Usage, ServedBy = response.ServedBy };
             }
 
             await SaveTurnAsync(conv, settings.Model, question, response, ct);
@@ -257,6 +279,11 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
     private static string QueryOf(JsonElement input) =>
         input.ValueKind == JsonValueKind.Object && input.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String ? q.GetString() ?? "" : "";
 
+    /// <summary>Respuesta sin datos (ni filas, ni SQL, ni traza) para las solicitudes que los guardarraíles bloquean.</summary>
+    private static QueryResponse Blocked(string conversationId, string runId, string answer, RunSettings settings, long ms) =>
+        new(conversationId, "ok", 0, answer, [], [], [], [], new UsageInfo(0, 0, 0, 0), ms, runId, settings.Model, settings.Effort, null, null, 0,
+            ShowChart: false, Display: "table_first", Insights: []);
+
     private static QueryResponse Build(string conversationId, string runId, string status, AgentRunResult run, UsageInfo usage, RunSettings settings, long ms,
         string answer, QueryResult? main, List<QueryResult> results, ChartHint? chart, AnswerParts? parts) =>
         new(conversationId, status, run.Iterations, answer,
@@ -292,14 +319,15 @@ public sealed class DataAgent(AgentLoop loop, SqlMcpClient mcp, ModelCatalog cat
         return messages;
     }
 
-    private async Task<ToolOutcome> ExecuteToolAsync(ToolCall tc, List<QueryResult> results, CancellationToken ct)
+    private async Task<ToolOutcome> ExecuteToolAsync(ToolCall tc, List<QueryResult> results, int rowLimit, CancellationToken ct)
     {
         var args = tc.Input.ToDictionary(kv => kv.Key, kv => (object?)kv.Value);
         var (text, isError) = await mcp.CallToolAsync(tc.Name, args, ct);
         if (tc.Name != "execute_query" || isError) return new ToolOutcome(Cap(text), isError);
 
         var sql = tc.Input.TryGetValue("query", out var q) && q.ValueKind == JsonValueKind.String ? q.GetString() ?? "" : "";
-        if (ParseQueryResult(sql, text) is not { } result) return new ToolOutcome(Cap(text), false);
+        if (ParseQueryResult(sql, text) is not { } parsed) return new ToolOutcome(Cap(text), false);
+        var result = RowLimitGuard.Cap(parsed, rowLimit);
 
         int number;
         lock (results) { results.Add(result); number = results.Count; }

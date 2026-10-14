@@ -111,3 +111,72 @@ public class GuardTests
         Assert.Equal(["AD_Account", "AccountId"], TechnicalTermGuard.Find("Los AD_Account con AccountId duplicado.", new(dict, [], [])));
     }
 }
+
+public class ResponseGuardTests
+{
+    [Theory]
+    [InlineData("Dame los teléfonos de los clientes de Monterrey")]
+    [InlineData("necesito los correos electrónicos de las cuentas con casos abiertos")]
+    [InlineData("lista de direcciones de clientes")]
+    [InlineData("Show me the phone numbers of the top customers")]
+    [InlineData("datos de contacto de los prospectos")]
+    [InlineData("mándame los emails de las cuentas")]
+    public void Contacto_detecta_solicitudes_de_telefonos_direcciones_y_correos(string question) =>
+        Assert.True(ContactDataGuard.IsRequest(question));
+
+    [Theory]
+    [InlineData("¿Cuántos correos se enviaron en septiembre?")]
+    [InlineData("Ventas por sucursal del mes pasado")]
+    [InlineData("How many emails were sent last month?")]
+    [InlineData("Dirección general: oportunidades por ejecutivo")]
+    public void Contacto_no_bloquea_preguntas_de_negocio_ni_metricas(string question) =>
+        Assert.False(ContactDataGuard.IsRequest(question));
+
+    [Fact]
+    public void Contacto_detecta_columnas_de_contacto_en_resultados()
+    {
+        QueryResult R(params string[] cols) => new("SELECT", cols, [], 0);
+        Assert.True(ContactDataGuard.HasContactColumns([R("Cuenta", "Teléfono")]));
+        Assert.True(ContactDataGuard.HasContactColumns([R("Cuenta", "EmailAddress")]));
+        Assert.False(ContactDataGuard.HasContactColumns([R("Sucursal", "Monto", "Ventas")]));
+    }
+
+    [Fact]
+    public void Contacto_responde_con_el_mensaje_de_permiso_en_el_idioma_de_la_pregunta()
+    {
+        Assert.Contains("no tiene permiso", ContactDataGuard.Message("dame los teléfonos de los clientes"));
+        Assert.Contains("does not have permission", ContactDataGuard.Message("give me the phone numbers of the customers"));
+    }
+
+    [Fact]
+    public void Negativas_se_sustituyen_por_el_mensaje_de_entrenamiento_sin_tocar_el_resto()
+    {
+        var q = "Ventas por sucursal";
+        var text = LimitationGuard.Sanitize("Las ventas suman $1,200. No puedo calcular los costos. Centro lidera.", q);
+        Assert.Equal($"Las ventas suman $1,200. {LimitationGuard.Message(q)} Centro lidera.", text);
+        Assert.DoesNotContain("No puedo", text);
+        Assert.Contains("entrenamiento", LimitationGuard.Sanitize("No es posible hacer esa proyección.", q));
+        Assert.Contains("still in training", LimitationGuard.Sanitize("I can't forecast that.", "what is the forecast for the next quarter"));
+        Assert.Equal("Las ventas de septiembre suman $1,234,567.", LimitationGuard.Sanitize("Las ventas de septiembre suman $1,234,567.", q));
+    }
+
+    [Fact]
+    public void Limite_de_filas_es_100_y_50_para_cuentas_con_productos_valiosos_o_casos_abiertos()
+    {
+        Assert.Equal(100, RowLimitGuard.LimitFor("Ventas por sucursal"));
+        Assert.Equal(50, RowLimitGuard.LimitFor("Cuentas con casos abiertos"));
+        Assert.Equal(50, RowLimitGuard.LimitFor("clientes que tienen productos valiosos"));
+        Assert.Equal(100, RowLimitGuard.LimitFor("Lista de cuentas por sucursal"));
+    }
+
+    [Fact]
+    public void Cap_recorta_las_filas_y_avisa_cuando_hay_mas()
+    {
+        var rows = Enumerable.Range(1, 300).Select(i => (IReadOnlyList<JsonElement>)[JsonDocument.Parse(i.ToString()).RootElement]).ToList();
+        var capped = RowLimitGuard.Cap(new QueryResult("SELECT", ["N"], rows, 300), 100);
+        Assert.Equal(100, capped.Rows.Count);
+        Assert.Equal(300, capped.RowCount);
+        Assert.True(RowLimitGuard.IsTruncated(capped, 100));
+        Assert.False(RowLimitGuard.IsTruncated(RowLimitGuard.Cap(new QueryResult("SELECT", ["N"], rows.Take(10).ToList(), 10), 100), 100));
+    }
+}
